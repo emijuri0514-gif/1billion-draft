@@ -1,0 +1,1363 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1">
+<title>⚾ 10億年俸ドラフト 〜NPB AI対戦マネジメント〜</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script src="https://bernardo-castilho.github.io/DragDropTouch/DragDropTouch.js"></script>
+<style>
+  html,body{ background:#0f172a; }
+  body{ font-family: -apple-system, BlinkMacSystemFont, "Hiragino Kaku Gothic ProN", "Yu Gothic", sans-serif; overscroll-behavior:none; }
+  ::-webkit-scrollbar{ width:8px; height:8px; }
+  ::-webkit-scrollbar-thumb{ background:#475569; border-radius:4px; }
+  .fade-in{ animation: fadeIn .25s ease-out; }
+  @keyframes fadeIn{ from{ opacity:0; transform:translateY(6px);} to{ opacity:1; transform:translateY(0);} }
+  .spin-slot{ animation: spin 0.9s linear infinite; }
+  @keyframes spin{ from{ transform:rotate(0deg);} to{ transform:rotate(360deg);} }
+  .card{ transition: box-shadow .15s, transform .1s, opacity .15s; cursor:pointer; }
+  .card:active{ transform:scale(0.98); }
+  .card.selected{ box-shadow:0 0 0 3px #facc15; }
+  .card.disabled{ opacity:.35; filter:grayscale(1); cursor:not-allowed; pointer-events:none; }
+  .dropzone{ transition: box-shadow .15s, background-color .15s; }
+  .dropzone.dragover{ box-shadow:0 0 0 3px #34d399; background-color:rgba(52,211,153,0.12); }
+  .tab-btn.active{ background:#facc15; color:#1e293b; }
+  .stat-bar-track{ background:#1e293b; border-radius:9999px; overflow:hidden; height:6px; }
+  .stat-bar-fill{ height:100%; border-radius:9999px; }
+  [hidden]{ display:none !important; }
+  .toast{ animation: fadeIn .2s ease-out, fadeOut .3s ease-in 2.2s forwards; }
+  @keyframes fadeOut{ to{ opacity:0; transform:translateY(-6px);} }
+</style>
+</head>
+<body class="bg-slate-900 text-slate-100 min-h-screen pb-14">
+<div id="app" class="max-w-5xl mx-auto px-3 sm:px-4 py-4"></div>
+<div id="toastHost" class="fixed top-3 left-1/2 -translate-x-1/2 z-[100] flex flex-col gap-2 items-center"></div>
+<footer class="fixed bottom-0 left-0 right-0 bg-slate-950/95 border-t border-slate-800 text-[10px] sm:text-xs text-slate-400 text-center py-1.5 px-2 z-40">
+  ※本アプリの選手名・年俸・能力値はゲーム用の架空／参考値です。実在の契約内容・球団の公式発表とは一切関係ありません。
+</footer>
+
+<script>
+/* =========================================================
+   定数・データ
+========================================================= */
+const BUDGET = 100000; // 万円 = 10億円
+const SAVE_PREFIX = "draft10oku_saveslot_";
+const SAVE_SLOT_COUNT = 5;
+
+const PLAYERS = [{"id":1,"name":"今井海斗","team":"ロッテ","pos":"投手","bestPos":["先発"],"age":29,"salary_current":10800,"salary_past_next":35000,"pStats":{"pow":68,"con":61,"sta":68},"fStats":null,"battingOrderFit":null},{"id":2,"name":"山崎晴","team":"阪神","pos":"投手","bestPos":["先発"],"age":26,"salary_current":19000,"salary_past_next":63500,"pStats":{"pow":87,"con":82,"sta":87},"fStats":null,"battingOrderFit":null},{"id":3,"name":"長谷川健太","team":"DeNA","pos":"投手","bestPos":["先発"],"age":28,"salary_current":7800,"salary_past_next":11300,"pStats":{"pow":78,"con":65,"sta":78},"fStats":null,"battingOrderFit":null},{"id":4,"name":"西村朔","team":"オリックス","pos":"投手","bestPos":["先発"],"age":26,"salary_current":700,"salary_past_next":1300,"pStats":{"pow":52,"con":51,"sta":52},"fStats":null,"battingOrderFit":null},{"id":5,"name":"池田翼","team":"オリックス","pos":"投手","bestPos":["先発"],"age":30,"salary_current":11100,"salary_past_next":27900,"pStats":{"pow":69,"con":80,"sta":69},"fStats":null,"battingOrderFit":null},{"id":6,"name":"石川朔","team":"阪神","pos":"投手","bestPos":["先発"],"age":25,"salary_current":1600,"salary_past_next":5000,"pStats":{"pow":47,"con":54,"sta":54},"fStats":null,"battingOrderFit":null},{"id":7,"name":"阿部蒼","team":"DeNA","pos":"投手","bestPos":["先発"],"age":29,"salary_current":2900,"salary_past_next":5700,"pStats":{"pow":66,"con":51,"sta":66},"fStats":null,"battingOrderFit":null},{"id":8,"name":"本田陸斗","team":"巨人","pos":"投手","bestPos":["先発"],"age":24,"salary_current":23100,"salary_past_next":38100,"pStats":{"pow":72,"con":87,"sta":81},"fStats":null,"battingOrderFit":null},{"id":9,"name":"加藤隼人","team":"楽天","pos":"投手","bestPos":["先発"],"age":30,"salary_current":25600,"salary_past_next":80100,"pStats":{"pow":89,"con":83,"sta":89},"fStats":null,"battingOrderFit":null},{"id":10,"name":"小川楓","team":"ロッテ","pos":"投手","bestPos":["先発"],"age":30,"salary_current":8000,"salary_past_next":18800,"pStats":{"pow":65,"con":75,"sta":73},"fStats":null,"battingOrderFit":null},{"id":11,"name":"柴田健","team":"中日","pos":"投手","bestPos":["先発"],"age":24,"salary_current":1400,"salary_past_next":1400,"pStats":{"pow":56,"con":65,"sta":56},"fStats":null,"battingOrderFit":null},{"id":12,"name":"近藤蒼","team":"西武","pos":"投手","bestPos":["先発"],"age":24,"salary_current":3700,"salary_past_next":12200,"pStats":{"pow":56,"con":65,"sta":58},"fStats":null,"battingOrderFit":null},{"id":13,"name":"長谷川涼太","team":"阪神","pos":"投手","bestPos":["中継ぎ"],"age":31,"salary_current":7300,"salary_past_next":5000,"pStats":{"pow":73,"con":76,"sta":59},"fStats":null,"battingOrderFit":null},{"id":14,"name":"林湊斗","team":"楽天","pos":"投手","bestPos":["中継ぎ"],"age":21,"salary_current":1500,"salary_past_next":2100,"pStats":{"pow":63,"con":45,"sta":53},"fStats":null,"battingOrderFit":null},{"id":15,"name":"吉田勲","team":"DeNA","pos":"投手","bestPos":["中継ぎ"],"age":28,"salary_current":47400,"salary_past_next":43100,"pStats":{"pow":93,"con":95,"sta":89},"fStats":null,"battingOrderFit":null},{"id":16,"name":"渡辺蒼","team":"西武","pos":"投手","bestPos":["中継ぎ"],"age":27,"salary_current":2200,"salary_past_next":5300,"pStats":{"pow":64,"con":56,"sta":57},"fStats":null,"battingOrderFit":null},{"id":17,"name":"後藤光","team":"巨人","pos":"投手","bestPos":["中継ぎ"],"age":19,"salary_current":1500,"salary_past_next":2400,"pStats":{"pow":44,"con":66,"sta":37},"fStats":null,"battingOrderFit":null},{"id":18,"name":"本田龍之介","team":"阪神","pos":"投手","bestPos":["中継ぎ"],"age":21,"salary_current":1900,"salary_past_next":4000,"pStats":{"pow":53,"con":62,"sta":51},"fStats":null,"battingOrderFit":null},{"id":19,"name":"中島一輝","team":"中日","pos":"投手","bestPos":["中継ぎ"],"age":32,"salary_current":8600,"salary_past_next":13900,"pStats":{"pow":68,"con":66,"sta":61},"fStats":null,"battingOrderFit":null},{"id":20,"name":"山口誠","team":"日本ハム","pos":"投手","bestPos":["中継ぎ"],"age":33,"salary_current":14700,"salary_past_next":13700,"pStats":{"pow":77,"con":82,"sta":83},"fStats":null,"battingOrderFit":null},{"id":21,"name":"清水晴","team":"西武","pos":"投手","bestPos":["中継ぎ"],"age":24,"salary_current":8300,"salary_past_next":10000,"pStats":{"pow":71,"con":65,"sta":58},"fStats":null,"battingOrderFit":null},{"id":22,"name":"内田漣","team":"楽天","pos":"投手","bestPos":["中継ぎ"],"age":33,"salary_current":13300,"salary_past_next":40200,"pStats":{"pow":75,"con":71,"sta":74},"fStats":null,"battingOrderFit":null},{"id":23,"name":"本田涼太","team":"ヤクルト","pos":"投手","bestPos":["抑え"],"age":21,"salary_current":3600,"salary_past_next":7200,"pStats":{"pow":52,"con":59,"sta":55},"fStats":null,"battingOrderFit":null},{"id":24,"name":"清水勲","team":"日本ハム","pos":"投手","bestPos":["抑え"],"age":29,"salary_current":3100,"salary_past_next":2300,"pStats":{"pow":52,"con":61,"sta":54},"fStats":null,"battingOrderFit":null},{"id":25,"name":"吉田颯","team":"ソフトバンク","pos":"投手","bestPos":["抑え"],"age":19,"salary_current":1300,"salary_past_next":4400,"pStats":{"pow":48,"con":45,"sta":32},"fStats":null,"battingOrderFit":null},{"id":26,"name":"橋本隼人","team":"オリックス","pos":"投手","bestPos":["抑え"],"age":29,"salary_current":22300,"salary_past_next":23600,"pStats":{"pow":74,"con":89,"sta":69},"fStats":null,"battingOrderFit":null},{"id":27,"name":"高木航","team":"DeNA","pos":"投手","bestPos":["抑え"],"age":24,"salary_current":9700,"salary_past_next":14800,"pStats":{"pow":58,"con":69,"sta":57},"fStats":null,"battingOrderFit":null},{"id":28,"name":"金子律","team":"ソフトバンク","pos":"投手","bestPos":["抑え"],"age":22,"salary_current":8700,"salary_past_next":8800,"pStats":{"pow":58,"con":62,"sta":53},"fStats":null,"battingOrderFit":null},{"id":29,"name":"加藤匠","team":"広島","pos":"投手","bestPos":["抑え"],"age":32,"salary_current":16900,"salary_past_next":12800,"pStats":{"pow":72,"con":81,"sta":71},"fStats":null,"battingOrderFit":null},{"id":30,"name":"三浦翼","team":"巨人","pos":"投手","bestPos":["抑え"],"age":30,"salary_current":36600,"salary_past_next":26000,"pStats":{"pow":86,"con":88,"sta":94},"fStats":null,"battingOrderFit":null},{"id":31,"name":"橋本湊斗","team":"西武","pos":"野手","bestPos":["捕手"],"age":20,"salary_current":1800,"salary_past_next":6200,"pStats":null,"fStats":{"pow":49,"con":46,"spd":56,"def":70,"arm":72},"battingOrderFit":["7番","8番"]},{"id":32,"name":"清水樹","team":"西武","pos":"野手","bestPos":["捕手"],"age":31,"salary_current":41100,"salary_past_next":78900,"pStats":null,"fStats":{"pow":95,"con":89,"spd":79,"def":89,"arm":93},"battingOrderFit":["1番","2番","3番"]},{"id":33,"name":"三浦丈","team":"巨人","pos":"野手","bestPos":["捕手"],"age":30,"salary_current":8400,"salary_past_next":22700,"pStats":null,"fStats":{"pow":63,"con":73,"spd":66,"def":73,"arm":83},"battingOrderFit":["2番","7番","8番"]},{"id":34,"name":"竹内朗","team":"DeNA","pos":"野手","bestPos":["捕手"],"age":25,"salary_current":11200,"salary_past_next":34000,"pStats":null,"fStats":{"pow":72,"con":75,"spd":65,"def":84,"arm":72},"battingOrderFit":["2番","5番","6番"]},{"id":35,"name":"高木蓮","team":"ヤクルト","pos":"野手","bestPos":["捕手"],"age":33,"salary_current":17300,"salary_past_next":32700,"pStats":null,"fStats":{"pow":73,"con":83,"spd":77,"def":83,"arm":92},"battingOrderFit":["1番","2番","5番"]},{"id":36,"name":"小川勲","team":"広島","pos":"野手","bestPos":["捕手"],"age":21,"salary_current":4100,"salary_past_next":3400,"pStats":null,"fStats":{"pow":50,"con":52,"spd":51,"def":56,"arm":58},"battingOrderFit":["7番","8番"]},{"id":37,"name":"森悠真","team":"ヤクルト","pos":"野手","bestPos":["内野"],"age":21,"salary_current":4000,"salary_past_next":6500,"pStats":null,"fStats":{"pow":65,"con":60,"spd":49,"def":58,"arm":56},"battingOrderFit":["5番","6番"]},{"id":38,"name":"三浦航","team":"楽天","pos":"野手","bestPos":["内野"],"age":28,"salary_current":13800,"salary_past_next":22600,"pStats":null,"fStats":{"pow":87,"con":85,"spd":81,"def":76,"arm":80},"battingOrderFit":["1番","2番","3番"]},{"id":39,"name":"池田海斗","team":"巨人","pos":"野手","bestPos":["内野"],"age":26,"salary_current":10600,"salary_past_next":13700,"pStats":null,"fStats":{"pow":73,"con":69,"spd":75,"def":65,"arm":72},"battingOrderFit":["1番","2番","5番"]},{"id":40,"name":"田中颯","team":"オリックス","pos":"野手","bestPos":["内野"],"age":22,"salary_current":4100,"salary_past_next":10400,"pStats":null,"fStats":{"pow":65,"con":46,"spd":61,"def":68,"arm":60},"battingOrderFit":["5番","6番"]},{"id":41,"name":"金子昇","team":"西武","pos":"野手","bestPos":["内野"],"age":27,"salary_current":23600,"salary_past_next":70600,"pStats":null,"fStats":{"pow":75,"con":87,"spd":88,"def":78,"arm":78},"battingOrderFit":["1番","2番","5番"]},{"id":42,"name":"三浦湊斗","team":"阪神","pos":"野手","bestPos":["内野"],"age":30,"salary_current":41600,"salary_past_next":79500,"pStats":null,"fStats":{"pow":86,"con":85,"spd":91,"def":89,"arm":96},"battingOrderFit":["1番","2番","3番"]},{"id":43,"name":"山崎律","team":"広島","pos":"野手","bestPos":["内野"],"age":29,"salary_current":10400,"salary_past_next":6700,"pStats":null,"fStats":{"pow":74,"con":75,"spd":72,"def":75,"arm":65},"battingOrderFit":["1番","2番","5番"]},{"id":44,"name":"柴田楓","team":"中日","pos":"野手","bestPos":["内野"],"age":22,"salary_current":5800,"salary_past_next":12900,"pStats":null,"fStats":{"pow":68,"con":77,"spd":72,"def":79,"arm":78},"battingOrderFit":["1番","2番","5番"]},{"id":45,"name":"石川大和","team":"広島","pos":"野手","bestPos":["内野"],"age":33,"salary_current":44300,"salary_past_next":138700,"pStats":null,"fStats":{"pow":84,"con":91,"spd":84,"def":89,"arm":95},"battingOrderFit":["1番","2番","3番"]},{"id":46,"name":"渡辺翼","team":"楽天","pos":"野手","bestPos":["内野"],"age":27,"salary_current":2600,"salary_past_next":2100,"pStats":null,"fStats":{"pow":63,"con":47,"spd":62,"def":54,"arm":55},"battingOrderFit":["6番","7番"]},{"id":47,"name":"山本隼人","team":"ソフトバンク","pos":"野手","bestPos":["内野"],"age":32,"salary_current":7700,"salary_past_next":17000,"pStats":null,"fStats":{"pow":62,"con":74,"spd":61,"def":63,"arm":72},"battingOrderFit":["2番"]},{"id":48,"name":"前田類","team":"ソフトバンク","pos":"野手","bestPos":["内野"],"age":22,"salary_current":1700,"salary_past_next":1600,"pStats":null,"fStats":{"pow":55,"con":56,"spd":55,"def":69,"arm":66},"battingOrderFit":["6番","7番"]},{"id":49,"name":"内田拓海","team":"広島","pos":"野手","bestPos":["内野"],"age":18,"salary_current":600,"salary_past_next":400,"pStats":null,"fStats":{"pow":53,"con":36,"spd":40,"def":52,"arm":42},"battingOrderFit":["6番","7番"]},{"id":50,"name":"田中湊","team":"DeNA","pos":"野手","bestPos":["内野"],"age":26,"salary_current":5100,"salary_past_next":10200,"pStats":null,"fStats":{"pow":73,"con":71,"spd":67,"def":71,"arm":68},"battingOrderFit":["2番","5番","6番"]},{"id":51,"name":"山本雄大","team":"オリックス","pos":"野手","bestPos":["内野"],"age":19,"salary_current":1300,"salary_past_next":3200,"pStats":null,"fStats":{"pow":41,"con":49,"spd":42,"def":52,"arm":35},"battingOrderFit":["6番","7番"]},{"id":52,"name":"山口昴","team":"西武","pos":"野手","bestPos":["内野"],"age":29,"salary_current":20500,"salary_past_next":70100,"pStats":null,"fStats":{"pow":88,"con":87,"spd":74,"def":81,"arm":87},"battingOrderFit":["1番","2番","3番"]},{"id":53,"name":"佐々木颯太","team":"ヤクルト","pos":"野手","bestPos":["外野"],"age":22,"salary_current":1300,"salary_past_next":1900,"pStats":null,"fStats":{"pow":46,"con":56,"spd":59,"def":37,"arm":56},"battingOrderFit":["6番","7番"]},{"id":54,"name":"田中楓","team":"日本ハム","pos":"野手","bestPos":["外野"],"age":29,"salary_current":16700,"salary_past_next":34200,"pStats":null,"fStats":{"pow":88,"con":76,"spd":81,"def":73,"arm":77},"battingOrderFit":["1番","2番","3番"]},{"id":55,"name":"林雄大","team":"中日","pos":"野手","bestPos":["外野"],"age":23,"salary_current":1600,"salary_past_next":1800,"pStats":null,"fStats":{"pow":65,"con":48,"spd":68,"def":49,"arm":50},"battingOrderFit":["5番","6番"]},{"id":56,"name":"長谷川悠斗","team":"日本ハム","pos":"野手","bestPos":["外野"],"age":32,"salary_current":17500,"salary_past_next":36100,"pStats":null,"fStats":{"pow":75,"con":84,"spd":78,"def":83,"arm":82},"battingOrderFit":["1番","2番","5番"]},{"id":57,"name":"岡田漣","team":"中日","pos":"野手","bestPos":["外野"],"age":24,"salary_current":3300,"salary_past_next":2600,"pStats":null,"fStats":{"pow":65,"con":46,"spd":54,"def":61,"arm":46},"battingOrderFit":["5番","6番"]},{"id":58,"name":"池田光","team":"広島","pos":"野手","bestPos":["外野"],"age":20,"salary_current":600,"salary_past_next":2000,"pStats":null,"fStats":{"pow":47,"con":37,"spd":41,"def":55,"arm":35},"battingOrderFit":["6番","7番"]},{"id":59,"name":"丸山誠","team":"ヤクルト","pos":"野手","bestPos":["外野"],"age":25,"salary_current":16400,"salary_past_next":29400,"pStats":null,"fStats":{"pow":83,"con":76,"spd":78,"def":87,"arm":74},"battingOrderFit":["1番","2番","3番"]},{"id":60,"name":"菅原大輔","team":"西武","pos":"野手","bestPos":["外野"],"age":30,"salary_current":9000,"salary_past_next":14700,"pStats":null,"fStats":{"pow":60,"con":75,"spd":69,"def":70,"arm":61},"battingOrderFit":["2番"]},{"id":61,"name":"木村将太","team":"ヤクルト","pos":"野手","bestPos":["外野"],"age":28,"salary_current":6600,"salary_past_next":8700,"pStats":null,"fStats":{"pow":66,"con":59,"spd":65,"def":73,"arm":74},"battingOrderFit":["5番","6番"]},{"id":62,"name":"中山龍之介","team":"日本ハム","pos":"野手","bestPos":["外野"],"age":23,"salary_current":8300,"salary_past_next":26700,"pStats":null,"fStats":{"pow":71,"con":63,"spd":66,"def":59,"arm":65},"battingOrderFit":["5番","6番"]},{"id":63,"name":"坂本翼","team":"ロッテ","pos":"野手","bestPos":["外野"],"age":33,"salary_current":34500,"salary_past_next":63100,"pStats":null,"fStats":{"pow":96,"con":99,"spd":88,"def":82,"arm":89},"battingOrderFit":["1番","2番","3番"]},{"id":64,"name":"高橋駿","team":"西武","pos":"野手","bestPos":["外野"],"age":20,"salary_current":4500,"salary_past_next":12800,"pStats":null,"fStats":{"pow":63,"con":60,"spd":57,"def":50,"arm":63},"battingOrderFit":["6番","7番"]},{"id":65,"name":"山口洋介","team":"日本ハム","pos":"野手","bestPos":["外野"],"age":24,"salary_current":8900,"salary_past_next":13400,"pStats":null,"fStats":{"pow":73,"con":76,"spd":81,"def":62,"arm":73},"battingOrderFit":["1番","2番","5番"]},{"id":66,"name":"石井大輔","team":"中日","pos":"野手","bestPos":["外野"],"age":20,"salary_current":4300,"salary_past_next":5600,"pStats":null,"fStats":{"pow":53,"con":63,"spd":59,"def":63,"arm":49},"battingOrderFit":["6番","7番"]},{"id":67,"name":"中島拓海","team":"広島","pos":"野手","bestPos":["外野"],"age":29,"salary_current":6300,"salary_past_next":16900,"pStats":null,"fStats":{"pow":67,"con":72,"spd":69,"def":72,"arm":65},"battingOrderFit":["2番","5番","6番"]},{"id":68,"name":"青木律","team":"広島","pos":"野手","bestPos":["外野"],"age":33,"salary_current":29700,"salary_past_next":94700,"pStats":null,"fStats":{"pow":91,"con":92,"spd":92,"def":90,"arm":96},"battingOrderFit":["1番","2番","3番"]}];
+
+const PLAYERS_BY_ID = {};
+PLAYERS.forEach(p => PLAYERS_BY_ID[p.id] = p);
+
+// 12巡のスロット定義（先発1/中継ぎ1/抑え1/捕手1/内野4/外野4 = 12）
+const ROUND_SLOTS = [
+  { round:1,  slotKey:"sp",  label:"先発",  pos:"投手", bestPos:"先発" },
+  { round:2,  slotKey:"rp",  label:"中継ぎ", pos:"投手", bestPos:"中継ぎ" },
+  { round:3,  slotKey:"cl",  label:"抑え",  pos:"投手", bestPos:"抑え" },
+  { round:4,  slotKey:"c",   label:"捕手",  pos:"野手", bestPos:"捕手" },
+  { round:5,  slotKey:"if1", label:"内野①", pos:"野手", bestPos:"内野" },
+  { round:6,  slotKey:"if2", label:"内野②", pos:"野手", bestPos:"内野" },
+  { round:7,  slotKey:"if3", label:"内野③", pos:"野手", bestPos:"内野" },
+  { round:8,  slotKey:"if4", label:"内野④", pos:"野手", bestPos:"内野" },
+  { round:9,  slotKey:"of1", label:"外野①", pos:"野手", bestPos:"外野" },
+  { round:10, slotKey:"of2", label:"外野②", pos:"野手", bestPos:"外野" },
+  { round:11, slotKey:"of3", label:"外野③", pos:"野手", bestPos:"外野" },
+  { round:12, slotKey:"of4", label:"外野④", pos:"野手", bestPos:"外野" },
+];
+const SLOT_BY_KEY = {};
+ROUND_SLOTS.forEach(s => SLOT_BY_KEY[s.slotKey] = s);
+const BATTER_SLOT_KEYS = ["c","if1","if2","if3","if4","of1","of2","of3","of4"];
+const PITCHER_SLOT_KEYS = ["sp","rp","cl"];
+const ALL_SLOT_KEYS = ROUND_SLOTS.map(s => s.slotKey);
+
+const AI_TYPES = {
+  data: { label:"里崎風・データ分析AI", desc:"コスパ（能力÷年俸）重視。2,000万〜5,000万円帯の若手〜中堅を中心に効率よく獲得します。" },
+  roman:{ label:"大穴ロマン派AI",      desc:"1,000万〜2,000万円未満の超格安若手を中心に12人編成し、一発逆転を狙います。" },
+  star: { label:"スター重視AI",       desc:"3億〜5億円台のスター選手を1〜2名軸に、残りを格安選手で埋める安定志向です。" },
+};
+
+const MODE_INFO = {
+  time:    { label:"① タイムトラベルモード", desc:"特定シーズン開幕前の年俸でチームを編成し、確定している翌年年俸と照合して即座に勝敗を判定します。" },
+  pennant: { label:"② AIペナントシミュレーション", desc:"指名理由を自由記述しつつ編成。AI査定エンジンが1年間の成績を乱数でシミュレーションし、ニュースダイジェスト付きで結果を発表します。" },
+  realtime:{ label:"③ リアルタイム予想モード", desc:"今季の年俸でチームを自由に編成し、いつでも保存・呼び出し・編集できます（AIとの対戦なし）。" },
+};
+
+/* =========================================================
+   ユーティリティ
+========================================================= */
+function formatMoney(man){
+  man = Math.round(man);
+  const neg = man < 0;
+  man = Math.abs(man);
+  const oku = Math.floor(man / 10000);
+  const rem = man % 10000;
+  let s;
+  if (oku > 0 && rem > 0) s = `${oku}億${rem.toLocaleString()}万円`;
+  else if (oku > 0) s = `${oku}億円`;
+  else s = `${rem.toLocaleString()}万円`;
+  return (neg ? "-" : "") + s;
+}
+function formatDelta(man){
+  const sign = man > 0 ? "+" : (man < 0 ? "-" : "±");
+  return sign + formatMoney(Math.abs(man)).replace(/^-/, "");
+}
+function avg(obj){ const vals = Object.values(obj); return vals.reduce((a,b)=>a+b,0) / vals.length; }
+function rand(min,max){ return Math.random()*(max-min)+min; }
+function clamp(v,min,max){ return Math.max(min, Math.min(max, v)); }
+function statAvgOf(p){ return p.pos === "投手" ? avg(p.pStats) : avg(p.fStats); }
+function uid(){ return Math.random().toString(36).slice(2,9); }
+
+function toast(msg, kind){
+  const host = document.getElementById("toastHost");
+  const el = document.createElement("div");
+  el.className = "toast px-4 py-2 rounded-lg shadow-lg text-sm font-bold " +
+    (kind === "error" ? "bg-rose-600 text-white" : kind === "warn" ? "bg-amber-500 text-slate-900" : "bg-emerald-500 text-slate-900");
+  el.textContent = msg;
+  host.appendChild(el);
+  setTimeout(() => el.remove(), 2600);
+}
+
+/* =========================================================
+   状態管理
+========================================================= */
+function freshRoster(){ const r = {}; ALL_SLOT_KEYS.forEach(k => r[k] = null); return r; }
+
+function defaultState(){
+  return {
+    screen: "home",
+    mode: null,           // 'time' | 'pennant' | 'realtime'
+    aiType: null,         // 'data' | 'roman' | 'star'
+    saveSlot: 1,
+    round: 1,
+    playerRoster: freshRoster(),
+    aiRoster: freshRoster(),
+    playerBudgetUsed: 0,
+    aiBudgetUsed: 0,
+    draftedIds: [],
+    pendingPick: null,
+    roundPlayerLocked: false,
+    roundAiLocked: false,
+    roundReveal: null,     // {playerId, aiId}
+    waiver: null,          // {contestedId, phase:'spinning'|'result', winner}
+    freeTexts: {},         // playerId -> string (mode2のみ)
+    freeTextDraft: "",
+    battingOrder: null,    // [{slotKey, order}] 並び替え後
+    resultsTab: "overall",
+    resultsData: null,
+    newsSelectedPlayerId: null,
+    builderPickingSlot: null, // realtime mode: 現在選択中のスロット
+    updatedAt: null,
+  };
+}
+let state = defaultState();
+let draftedSet = new Set();
+function syncDraftedSet(){ draftedSet = new Set(state.draftedIds); }
+
+/* =========================================================
+   セーブ／ロード
+========================================================= */
+function serializeState(){
+  const s = { ...state };
+  delete s.builderPickingSlot;
+  return JSON.stringify({
+    mode: s.mode, aiType: s.aiType, saveSlot: s.saveSlot, round: s.round,
+    playerRoster: mapRosterIds(s.playerRoster), aiRoster: mapRosterIds(s.aiRoster),
+    playerBudgetUsed: s.playerBudgetUsed, aiBudgetUsed: s.aiBudgetUsed,
+    draftedIds: s.draftedIds, freeTexts: s.freeTexts, battingOrder: s.battingOrder,
+    screen: (s.screen === "waiver" ? "draft" : s.screen),
+    resultsData: s.resultsData,
+    updatedAt: Date.now(),
+  });
+}
+function mapRosterIds(roster){
+  const r = {};
+  ALL_SLOT_KEYS.forEach(k => r[k] = roster[k] ? roster[k].id : null);
+  return r;
+}
+function unmapRosterIds(roster){
+  const r = {};
+  ALL_SLOT_KEYS.forEach(k => r[k] = (roster && roster[k] != null) ? (PLAYERS_BY_ID[roster[k]] || null) : null);
+  return r;
+}
+function saveGame(slot, silent){
+  try{
+    state.saveSlot = slot;
+    localStorage.setItem(SAVE_PREFIX + slot, serializeState());
+    if (!silent) toast(`スロット${slot}に保存しました`);
+  }catch(e){ toast("保存に失敗しました", "error"); }
+}
+function loadGameRaw(slot){
+  try{
+    const raw = localStorage.getItem(SAVE_PREFIX + slot);
+    if (!raw) return null;
+    return JSON.parse(raw);
+  }catch(e){ return null; }
+}
+function loadGame(slot){
+  const data = loadGameRaw(slot);
+  if (!data){ toast("保存データがありません", "error"); return; }
+  state = defaultState();
+  state.mode = data.mode; state.aiType = data.aiType; state.saveSlot = slot;
+  state.round = data.round || 1;
+  state.playerRoster = unmapRosterIds(data.playerRoster || {});
+  state.aiRoster = unmapRosterIds(data.aiRoster || {});
+  state.playerBudgetUsed = data.playerBudgetUsed || 0;
+  state.aiBudgetUsed = data.aiBudgetUsed || 0;
+  state.draftedIds = data.draftedIds || [];
+  state.freeTexts = data.freeTexts || {};
+  state.battingOrder = data.battingOrder || null;
+  state.resultsData = data.resultsData || null;
+  state.screen = data.screen || "home";
+  syncDraftedSet();
+  render();
+  toast(`スロット${slot}から再開しました`);
+}
+function deleteSave(slot){
+  localStorage.removeItem(SAVE_PREFIX + slot);
+  render();
+}
+function listSaveSummaries(){
+  const list = [];
+  for (let i=1; i<=SAVE_SLOT_COUNT; i++){
+    const data = loadGameRaw(i);
+    list.push({ slot:i, data });
+  }
+  return list;
+}
+
+/* =========================================================
+   画面遷移／描画ディスパッチ
+========================================================= */
+const app = document.getElementById("app");
+function render(){
+  let html = "";
+  switch(state.screen){
+    case "home": html = renderHome(); break;
+    case "aiselect": html = renderAiSelect(); break;
+    case "draft": html = renderDraft(); break;
+    case "builder": html = renderBuilder(); break;
+    case "order": html = renderOrder(); break;
+    case "results": html = renderResults(); break;
+    default: html = renderHome();
+  }
+  app.innerHTML = `<div class="fade-in">${html}</div>`;
+  afterRender();
+}
+
+function goHome(){ state = defaultState(); render(); }
+
+/* =========================================================
+   共通UIパーツ
+========================================================= */
+function header(subtitle){
+  return `
+  <div class="mb-4">
+    <div class="flex items-center justify-between flex-wrap gap-2">
+      <h1 class="text-lg sm:text-2xl font-black tracking-tight">⚾ 10億年俸ドラフト</h1>
+      <button data-action="go-home" class="text-xs sm:text-sm bg-slate-800 hover:bg-slate-700 px-3 py-1.5 rounded-lg border border-slate-700">🏠 ホームへ</button>
+    </div>
+    ${subtitle ? `<p class="text-slate-400 text-xs sm:text-sm mt-1">${subtitle}</p>` : ""}
+  </div>`;
+}
+
+function budgetBar(used, label){
+  const remain = BUDGET - used;
+  const pct = clamp((used / BUDGET) * 100, 0, 100);
+  const danger = remain < 5000;
+  return `
+  <div class="bg-slate-800/60 border border-slate-700 rounded-xl p-3">
+    <div class="flex justify-between text-xs sm:text-sm mb-1">
+      <span class="text-slate-300">${label}</span>
+      <span class="${danger ? "text-rose-400" : "text-emerald-400"} font-bold">残り ${formatMoney(remain)}</span>
+    </div>
+    <div class="stat-bar-track">
+      <div class="stat-bar-fill ${danger ? "bg-rose-500" : "bg-emerald-500"}" style="width:${pct}%"></div>
+    </div>
+    <div class="text-[10px] sm:text-xs text-slate-500 mt-1">使用済み ${formatMoney(used)} / 予算 ${formatMoney(BUDGET)}</div>
+  </div>`;
+}
+
+function statBarsPitcher(p){
+  return ["pow","con","sta"].map(k=>{
+    const label = {pow:"球威",con:"制球",sta:"スタミナ"}[k];
+    const v = p.pStats[k];
+    return `<div class="flex items-center gap-2 text-[11px]">
+      <span class="w-14 text-slate-400 shrink-0">${label}</span>
+      <div class="stat-bar-track flex-1"><div class="stat-bar-fill bg-sky-400" style="width:${v}%"></div></div>
+      <span class="w-6 text-right text-slate-300">${v}</span>
+    </div>`;
+  }).join("");
+}
+function statBarsBatter(p){
+  return ["pow","con","spd","def","arm"].map(k=>{
+    const label = {pow:"長打力",con:"巧打",spd:"走力",def:"守備",arm:"肩"}[k];
+    const v = p.fStats[k];
+    return `<div class="flex items-center gap-2 text-[11px]">
+      <span class="w-14 text-slate-400 shrink-0">${label}</span>
+      <div class="stat-bar-track flex-1"><div class="stat-bar-fill bg-fuchsia-400" style="width:${v}%"></div></div>
+      <span class="w-6 text-right text-slate-300">${v}</span>
+    </div>`;
+  }).join("");
+}
+function statBars(p){ return p.pos === "投手" ? statBarsPitcher(p) : statBarsBatter(p); }
+
+function playerCard(p, opts){
+  opts = opts || {};
+  const disabled = !!opts.disabled;
+  const selected = !!opts.selected;
+  const compact = !!opts.compact;
+  const draggable = !!opts.draggable && !disabled;
+  const selectAction = opts.selectAction || "select-candidate";
+  const selectLabel = opts.selectLabel || "この選手を選ぶ";
+  const extraAttrs = opts.extraAttrs || "";
+  return `
+  <div class="card ${selected ? "selected" : ""} ${disabled ? "disabled" : ""} bg-slate-800 border border-slate-700 rounded-xl p-3"
+       data-role="candidate-card" data-player-id="${p.id}" draggable="${draggable ? "true" : "false"}">
+    <div class="flex justify-between items-start gap-1">
+      <div>
+        <div class="font-bold text-sm sm:text-base leading-tight">${p.name}</div>
+        <div class="text-[10px] sm:text-xs text-slate-400">${p.team} ／ ${p.bestPos.join("・")} ／ ${p.age}歳</div>
+      </div>
+      <span class="text-[10px] sm:text-xs bg-slate-900 border border-slate-600 rounded px-1.5 py-0.5 shrink-0">${p.pos}</span>
+    </div>
+    <div class="mt-2 font-black text-amber-400 text-sm sm:text-base">${formatMoney(p.salary_current)}</div>
+    ${compact ? "" : `<div class="mt-2 space-y-1">${statBars(p)}</div>`}
+    <div class="mt-2 flex gap-2">
+      ${!disabled ? `<button type="button" data-action="${selectAction}" data-player-id="${p.id}" ${extraAttrs} class="text-xs bg-amber-500 hover:bg-amber-400 text-slate-900 font-bold px-2 py-1 rounded-lg">${selectLabel}</button>` : ""}
+    </div>
+  </div>`;
+}
+
+function radarCanvasBlock(id){
+  return `<div class="bg-slate-800/60 border border-slate-700 rounded-xl p-3">
+    <div class="text-xs text-slate-400 mb-1">能力レーダーチャート</div>
+    <canvas id="${id}" height="220"></canvas>
+  </div>`;
+}
+
+/* =========================================================
+   ホーム画面
+========================================================= */
+function renderHome(){
+  const saves = listSaveSummaries();
+  const saveRows = saves.map(({slot, data}) => {
+    if (!data){
+      return `<div class="flex items-center justify-between bg-slate-800/40 border border-dashed border-slate-700 rounded-lg px-3 py-2 text-xs sm:text-sm text-slate-500">
+        <span>スロット${slot}：空き</span>
+      </div>`;
+    }
+    const modeLabel = MODE_INFO[data.mode] ? MODE_INFO[data.mode].label : data.mode;
+    const date = data.updatedAt ? new Date(data.updatedAt).toLocaleString("ja-JP") : "";
+    return `<div class="flex items-center justify-between bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 gap-2 flex-wrap">
+      <div class="text-xs sm:text-sm">
+        <div class="font-bold">スロット${slot}：${modeLabel}</div>
+        <div class="text-slate-400 text-[10px] sm:text-xs">巡目 ${data.round || 1}/12 ・ ${date}</div>
+      </div>
+      <div class="flex gap-2">
+        <button data-action="continue-save" data-slot="${slot}" class="text-xs bg-emerald-600 hover:bg-emerald-500 px-2 py-1 rounded-lg font-bold">続きから</button>
+        <button data-action="delete-save" data-slot="${slot}" class="text-xs bg-rose-700 hover:bg-rose-600 px-2 py-1 rounded-lg">削除</button>
+      </div>
+    </div>`;
+  }).join("");
+
+  const modeButtons = Object.entries(MODE_INFO).map(([key, info]) => `
+    <button data-action="choose-mode" data-mode="${key}" class="text-left bg-slate-800 hover:bg-slate-700 border border-slate-700 hover:border-amber-400 rounded-xl p-4 transition">
+      <div class="font-black text-base sm:text-lg mb-1">${info.label}</div>
+      <div class="text-xs sm:text-sm text-slate-400">${info.desc}</div>
+    </button>`).join("");
+
+  return `
+  ${header("予算10億円でNPB選手12名を編成し、1年後の総昇給額を競う戦略シミュレーション")}
+  <div class="bg-amber-500/10 border border-amber-500/40 text-amber-300 text-xs sm:text-sm rounded-xl p-3 mb-4">
+    ⚠️ 選手名・年俸・能力値はゲーム用の架空／参考値です。実際の契約内容とは異なります。
+  </div>
+  <div class="grid gap-3 mb-6">${modeButtons}</div>
+  <div class="bg-slate-800/40 border border-slate-700 rounded-xl p-4">
+    <div class="font-bold mb-2 text-sm sm:text-base">💾 セーブデータ（全モード共通）</div>
+    <div class="space-y-2">${saveRows}</div>
+  </div>`;
+}
+
+/* =========================================================
+   AIタイプ選択画面
+========================================================= */
+function renderAiSelect(){
+  const cards = Object.entries(AI_TYPES).map(([key, t]) => `
+    <button data-action="choose-ai" data-ai="${key}" class="text-left bg-slate-800 hover:bg-slate-700 border border-slate-700 hover:border-amber-400 rounded-xl p-4 transition">
+      <div class="font-black text-base mb-1">${t.label}</div>
+      <div class="text-xs sm:text-sm text-slate-400">${t.desc}</div>
+    </button>`).join("");
+  return `
+  ${header(MODE_INFO[state.mode] ? MODE_INFO[state.mode].label : "")}
+  <div class="mb-3 font-bold">ライバルスカウトAIを選択してください</div>
+  <div class="grid gap-3">${cards}</div>
+  <div class="mt-4">
+    <button data-action="back-to-home" class="text-xs bg-slate-800 hover:bg-slate-700 border border-slate-700 px-3 py-1.5 rounded-lg">← モード選択に戻る</button>
+  </div>`;
+}
+
+/* =========================================================
+   ドラフトエンジン（モード①②：同時指名＋ウェーバー）
+========================================================= */
+function candidatePoolFor(slot, excludeIds){
+  return PLAYERS.filter(p => p.pos === slot.pos && p.bestPos.includes(slot.bestPos) && !excludeIds.has(p.id));
+}
+function minRemainingCostFrom(startRoundIdx, excludeIds){
+  let total = 0;
+  for (let r = startRoundIdx; r <= 12; r++){
+    const slot = ROUND_SLOTS[r-1];
+    const pool = candidatePoolFor(slot, excludeIds);
+    if (pool.length === 0) return Infinity;
+    total += Math.min(...pool.map(p => p.salary_current));
+  }
+  return total;
+}
+
+function aiScore(aiType, p, aiRoster){
+  const statAvg = statAvgOf(p);
+  const salary = p.salary_current;
+  if (aiType === "data"){
+    let score = statAvg / (salary / 1000);
+    if (salary >= 2000 && salary <= 5000) score *= 1.35;
+    return score;
+  }
+  if (aiType === "roman"){
+    let score = statAvg;
+    if (salary < 2000) score += 45;
+    else score -= salary / 800;
+    return score;
+  }
+  if (aiType === "star"){
+    const starsSoFar = Object.values(aiRoster).filter(x => x && x.salary_current >= 30000).length;
+    if (salary >= 30000 && salary <= 50000 && starsSoFar < 2) return statAvg + 70;
+    if (salary < 3000) return statAvg + 25;
+    return statAvg - 15;
+  }
+  return statAvg;
+}
+
+function aiChoose(slot, excludeIds){
+  const budgetRemain = BUDGET - state.aiBudgetUsed;
+  let pool = candidatePoolFor(slot, excludeIds).filter(p => p.salary_current <= budgetRemain);
+  // 予算破綻を避けるため、この後の巡を編成しきれる選手のみに絞る
+  const feasible = pool.filter(p => {
+    const nextExclude = new Set(excludeIds); nextExclude.add(p.id);
+    const remainAfter = budgetRemain - p.salary_current;
+    return minRemainingCostFrom(slot.round + 1, nextExclude) <= remainAfter;
+  });
+  if (feasible.length > 0) pool = feasible;
+  if (pool.length === 0){
+    // フォールバック：最安の選手を強制選択（理論上到達しない保険）
+    const all = candidatePoolFor(slot, excludeIds).sort((a,b) => a.salary_current - b.salary_current);
+    return all[0] ? all[0].id : null;
+  }
+  const scored = pool.map(p => ({ p, score: aiScore(state.aiType, p, state.aiRoster) }));
+  scored.sort((a,b) => b.score - a.score);
+  const top = scored.slice(0, Math.min(3, scored.length));
+  const weights = [0.6, 0.25, 0.15];
+  const r = Math.random();
+  let acc = 0, chosen = top[0];
+  for (let i=0; i<top.length; i++){ acc += weights[i] || 0; if (r <= acc){ chosen = top[i]; break; } }
+  return chosen.p.id;
+}
+
+function lockPlayerPick(slot, id){
+  const p = PLAYERS_BY_ID[id];
+  state.playerRoster[slot.slotKey] = p;
+  state.playerBudgetUsed += p.salary_current;
+  state.draftedIds.push(id); syncDraftedSet();
+  state.roundPlayerLocked = true;
+  if (state.mode === "pennant" && state.freeTextDraft && state.freeTextDraft.trim()){
+    state.freeTexts[id] = state.freeTextDraft.trim();
+  }
+  state.freeTextDraft = "";
+}
+function lockAiPick(slot, id){
+  const p = PLAYERS_BY_ID[id];
+  state.aiRoster[slot.slotKey] = p;
+  state.aiBudgetUsed += p.salary_current;
+  state.draftedIds.push(id); syncDraftedSet();
+  state.roundAiLocked = true;
+}
+
+function selectCandidate(id){
+  if (state.roundPlayerLocked) return;
+  const p = PLAYERS_BY_ID[id];
+  const remain = BUDGET - state.playerBudgetUsed;
+  if (p.salary_current > remain){ toast("予算が不足しています", "error"); return; }
+  state.pendingPick = id;
+  render();
+}
+
+function confirmPick(){
+  if (state.roundPlayerLocked || !state.pendingPick) return;
+  const slot = ROUND_SLOTS[state.round - 1];
+  const playerPickId = state.pendingPick;
+
+  if (!state.roundAiLocked){
+    const excludeIds = new Set(draftedSet);
+    const aiPickId = aiChoose(slot, excludeIds);
+    if (aiPickId != null && aiPickId === playerPickId){
+      runWaiver(slot, playerPickId);
+      return;
+    }
+    if (aiPickId != null) lockAiPick(slot, aiPickId);
+  }
+  lockPlayerPick(slot, playerPickId);
+  state.pendingPick = null;
+  proceedIfBothLocked();
+}
+
+function runWaiver(slot, contestedId){
+  state.waiver = { contestedId, phase: "spinning" };
+  render();
+  setTimeout(() => {
+    const playerWins = Math.random() < 0.5;
+    state.waiver.phase = "result";
+    state.waiver.winner = playerWins ? "player" : "ai";
+    if (playerWins){
+      lockPlayerPick(slot, contestedId);
+      const excludeIds = new Set(draftedSet);
+      const aiPickId = aiChoose(slot, excludeIds);
+      if (aiPickId != null) lockAiPick(slot, aiPickId);
+    } else {
+      lockAiPick(slot, contestedId);
+      state.pendingPick = null;
+    }
+    render();
+    setTimeout(() => {
+      state.waiver = null;
+      state.pendingPick = null;
+      proceedIfBothLocked();
+    }, 1500);
+  }, 1400);
+}
+
+function proceedIfBothLocked(){
+  if (state.roundPlayerLocked && state.roundAiLocked){
+    const slot = ROUND_SLOTS[state.round - 1];
+    state.roundReveal = { playerId: state.playerRoster[slot.slotKey].id, aiId: state.aiRoster[slot.slotKey].id };
+    saveGame(state.saveSlot, true);
+  }
+  render();
+}
+
+function advanceRound(){
+  if (state.round >= 12){
+    state.screen = "order";
+    state.battingOrder = null;
+    saveGame(state.saveSlot, true);
+    render();
+    return;
+  }
+  state.round += 1;
+  state.roundPlayerLocked = false;
+  state.roundAiLocked = false;
+  state.roundReveal = null;
+  state.pendingPick = null;
+  render();
+}
+
+function rosterSlotBox(roster, slotKey, opts){
+  opts = opts || {};
+  const slot = SLOT_BY_KEY[slotKey];
+  const p = roster[slotKey];
+  const isCurrent = opts.current;
+  return `
+  <div class="dropzone ${isCurrent ? "ring-2 ring-amber-400" : ""} bg-slate-900 border border-slate-700 rounded-lg p-2 text-center"
+       data-role="${opts.droppable ? "roster-slot-drop" : ""}" data-slot-key="${slotKey}">
+    <div class="text-[10px] text-slate-500">${slot.label}</div>
+    ${p ? `<div class="text-xs sm:text-sm font-bold truncate">${p.name}</div><div class="text-[10px] text-amber-400">${formatMoney(p.salary_current)}</div>`
+        : `<div class="text-xs text-slate-600 py-2">－</div>`}
+  </div>`;
+}
+
+function rosterGrid(roster, opts){
+  opts = opts || {};
+  return `<div class="grid grid-cols-4 sm:grid-cols-6 gap-1.5">
+    ${ALL_SLOT_KEYS.map(k => rosterSlotBox(roster, k, { current: opts.currentSlotKey === k, droppable: opts.droppable })).join("")}
+  </div>`;
+}
+
+function renderDraft(){
+  const slot = ROUND_SLOTS[state.round - 1];
+  const excludeIds = new Set(draftedSet);
+  let pool = candidatePoolFor(slot, excludeIds);
+  pool = pool.sort((a,b) => a.salary_current - b.salary_current);
+
+  const waiverModal = state.waiver ? renderWaiverModal() : "";
+
+  if (state.roundReveal && !state.waiver){
+    const pPick = PLAYERS_BY_ID[state.roundReveal.playerId];
+    const aPick = PLAYERS_BY_ID[state.roundReveal.aiId];
+    return `
+    ${header(`${MODE_INFO[state.mode].label} ／ 第${state.round}巡「${slot.label}」結果`)}
+    <div class="bg-slate-800 border border-amber-500/40 rounded-xl p-4 mb-4 text-center">
+      <div class="text-amber-400 font-black text-sm sm:text-base mb-3">📣 同時指名 結果発表！</div>
+      <div class="grid grid-cols-2 gap-3">
+        <div class="bg-slate-900 rounded-lg p-3">
+          <div class="text-xs text-sky-400 font-bold mb-1">あなた</div>
+          <div class="font-black">${pPick.name}</div>
+          <div class="text-xs text-slate-400">${pPick.team} ／ ${formatMoney(pPick.salary_current)}</div>
+        </div>
+        <div class="bg-slate-900 rounded-lg p-3">
+          <div class="text-xs text-rose-400 font-bold mb-1">ライバル球団</div>
+          <div class="font-black">${aPick.name}</div>
+          <div class="text-xs text-slate-400">${aPick.team} ／ ${formatMoney(aPick.salary_current)}</div>
+        </div>
+      </div>
+    </div>
+    <div class="text-center">
+      <button data-action="advance-round" class="bg-amber-500 hover:bg-amber-400 text-slate-900 font-black px-6 py-3 rounded-xl">
+        ${state.round >= 12 ? "編成完了 → 打順提案へ" : "次の巡へ進む"}
+      </button>
+    </div>`;
+  }
+
+  const waiverNotice = (state.roundAiLocked && !state.roundPlayerLocked)
+    ? `<div class="bg-rose-500/10 border border-rose-500/40 text-rose-300 text-xs sm:text-sm rounded-lg p-2 mb-3">⚠️ ウェーバーの結果、その選手はライバル球団が獲得しました。別の選手を指名してください。</div>`
+    : "";
+
+  const selected = state.pendingPick ? PLAYERS_BY_ID[state.pendingPick] : null;
+
+  const freeTextBlock = (state.mode === "pennant") ? `
+    <div class="bg-slate-800/60 border border-slate-700 rounded-xl p-3 mt-3">
+      <label class="text-xs text-slate-400 block mb-1">獲得理由・ブレイク予想（任意／「フォーム変更」「レギュラー定着」「故障明け」「移籍1年目」等のキーワードがAI査定に影響します）</label>
+      <textarea data-role="free-text" rows="2" class="w-full bg-slate-900 border border-slate-700 rounded-lg p-2 text-xs sm:text-sm" placeholder="例：新球種を習得しレギュラー定着が期待できる">${state.freeTextDraft || ""}</textarea>
+    </div>` : "";
+
+  return `
+  ${header(`${MODE_INFO[state.mode].label} ／ ライバル：${AI_TYPES[state.aiType].label}`)}
+  <div class="flex items-center justify-between mb-3">
+    <div class="text-sm sm:text-base font-black">第 ${state.round} / 12 巡：<span class="text-amber-400">${slot.label}</span> を指名</div>
+    <button data-action="save-current" class="text-xs bg-slate-800 hover:bg-slate-700 border border-slate-700 px-2 py-1 rounded-lg">💾 保存</button>
+  </div>
+  ${waiverNotice}
+  <div class="grid sm:grid-cols-2 gap-3 mb-3">
+    ${budgetBar(state.playerBudgetUsed, "あなたの残予算")}
+    ${budgetBar(state.aiBudgetUsed, "ライバル球団の残予算（推定）")}
+  </div>
+
+  <div class="mb-3">
+    <div class="text-xs text-slate-400 mb-1">あなたのロースター（枠にカードをドラッグ、またはカードのボタンで指名）</div>
+    ${rosterGrid(state.playerRoster, { currentSlotKey: slot.slotKey, droppable: true })}
+  </div>
+
+  <div class="grid lg:grid-cols-3 gap-3">
+    <div class="lg:col-span-2">
+      <div class="text-xs text-slate-400 mb-2">指名候補（${slot.label} ／ ${pool.length}名）</div>
+      <div class="grid sm:grid-cols-2 gap-2 max-h-[52vh] overflow-y-auto pr-1">
+        ${pool.map(p => {
+          const disabled = state.roundPlayerLocked || p.salary_current > (BUDGET - state.playerBudgetUsed);
+          return playerCard(p, { disabled, selected: state.pendingPick === p.id, draggable: true });
+        }).join("")}
+      </div>
+    </div>
+    <div class="space-y-3">
+      ${selected ? radarCanvasBlock("pickRadar") : `<div class="bg-slate-800/40 border border-dashed border-slate-700 rounded-xl p-4 text-center text-xs text-slate-500">候補を選ぶとレーダーチャートを表示します</div>`}
+      ${freeTextBlock}
+      <button data-action="confirm-pick" ${(!selected || state.roundPlayerLocked) ? "disabled" : ""}
+        class="w-full font-black py-3 rounded-xl ${(!selected || state.roundPlayerLocked) ? "bg-slate-700 text-slate-500 cursor-not-allowed" : "bg-amber-500 hover:bg-amber-400 text-slate-900"}">
+        ✅ 指名を確定する
+      </button>
+    </div>
+  </div>
+  ${waiverModal}`;
+}
+
+function renderWaiverModal(){
+  const p = PLAYERS_BY_ID[state.waiver.contestedId];
+  if (state.waiver.phase === "spinning"){
+    return `
+    <div class="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4">
+      <div class="bg-slate-800 border border-amber-500 rounded-2xl p-6 text-center max-w-xs w-full">
+        <div class="text-3xl mb-3 spin-slot">🎲</div>
+        <div class="font-black mb-1">競合発生！ウェーバー抽選中…</div>
+        <div class="text-sm text-slate-400">${p.name} 選手を両球団が指名しました</div>
+      </div>
+    </div>`;
+  }
+  const won = state.waiver.winner === "player";
+  return `
+  <div class="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4">
+    <div class="bg-slate-800 border ${won ? "border-emerald-500" : "border-rose-500"} rounded-2xl p-6 text-center max-w-xs w-full">
+      <div class="text-3xl mb-3">${won ? "🎉" : "😢"}</div>
+      <div class="font-black mb-1">${won ? `${p.name} 選手を獲得しました！` : `ウェーバーに敗れました…`}</div>
+      <div class="text-sm text-slate-400">${won ? "抽選の結果、あなたが指名権を獲得しました" : `${p.name} 選手はライバル球団が獲得しました。続けて別の選手を指名してください。`}</div>
+    </div>
+  </div>`;
+}
+
+/* =========================================================
+   モード③：リアルタイム予想ビルダー（AI対戦なし、自由編成）
+========================================================= */
+function builderAssignedIds(){
+  return new Set(Object.values(state.playerRoster).filter(Boolean).map(p => p.id));
+}
+function assignBuilderPlayer(slotKey, playerId){
+  const slot = SLOT_BY_KEY[slotKey];
+  const p = PLAYERS_BY_ID[playerId];
+  if (!p || p.pos !== slot.pos || !p.bestPos.includes(slot.bestPos)){ toast("このスロットには指名できません", "error"); return; }
+  const prev = state.playerRoster[slotKey];
+  const usedWithoutSlot = state.playerBudgetUsed - (prev ? prev.salary_current : 0);
+  if (usedWithoutSlot + p.salary_current > BUDGET){ toast("予算が不足しています", "error"); return; }
+  state.playerRoster[slotKey] = p;
+  state.playerBudgetUsed = usedWithoutSlot + p.salary_current;
+  state.builderPickingSlot = null;
+  state.battingOrder = null;
+  saveGame(state.saveSlot, true);
+  render();
+}
+function unassignBuilderSlot(slotKey){
+  const prev = state.playerRoster[slotKey];
+  if (!prev) return;
+  state.playerBudgetUsed -= prev.salary_current;
+  state.playerRoster[slotKey] = null;
+  state.battingOrder = null;
+  saveGame(state.saveSlot, true);
+  render();
+}
+
+function renderBuilder(){
+  const pickingSlotKey = state.builderPickingSlot;
+  const assignedIds = builderAssignedIds();
+  const filledCount = Object.values(state.playerRoster).filter(Boolean).length;
+
+  let pickerBlock = "";
+  if (pickingSlotKey){
+    const slot = SLOT_BY_KEY[pickingSlotKey];
+    const pool = PLAYERS.filter(p => p.pos === slot.pos && p.bestPos.includes(slot.bestPos) && !assignedIds.has(p.id))
+      .sort((a,b) => a.salary_current - b.salary_current);
+    const prev = state.playerRoster[pickingSlotKey];
+    const usedWithoutSlot = state.playerBudgetUsed - (prev ? prev.salary_current : 0);
+    pickerBlock = `
+    <div class="fixed inset-0 bg-black/70 flex items-end sm:items-center justify-center z-50 p-2 sm:p-4" data-role="builder-picker-backdrop">
+      <div class="bg-slate-900 border border-slate-700 rounded-2xl p-4 max-w-3xl w-full max-h-[85vh] overflow-y-auto">
+        <div class="flex justify-between items-center mb-3">
+          <div class="font-black">${slot.label} を選択</div>
+          <button data-action="close-builder-picker" class="text-slate-400 hover:text-white text-xl leading-none">×</button>
+        </div>
+        <div class="grid sm:grid-cols-2 gap-2">
+          ${pool.map(p => playerCard(p, {
+            disabled: usedWithoutSlot + p.salary_current > BUDGET,
+            selectAction: "assign-builder-player",
+            selectLabel: "この選手を編成する",
+            extraAttrs: `data-slot-key="${pickingSlotKey}"`,
+          })).join("")}
+        </div>
+      </div>
+    </div>`;
+  }
+
+  return `
+  ${header(MODE_INFO.realtime.label)}
+  <div class="flex items-center justify-between mb-3 flex-wrap gap-2">
+    <div class="text-sm text-slate-400">枠をタップして選手を指名・変更できます（${filledCount}/12 編成済み）</div>
+    <div class="flex gap-2">
+      <button data-action="save-current" class="text-xs bg-slate-800 hover:bg-slate-700 border border-slate-700 px-3 py-1.5 rounded-lg">💾 保存</button>
+      <button data-action="go-order" class="text-xs bg-amber-500 hover:bg-amber-400 text-slate-900 font-bold px-3 py-1.5 rounded-lg">📋 推奨打順を見る</button>
+    </div>
+  </div>
+  ${budgetBar(state.playerBudgetUsed, "残予算")}
+  <div class="grid sm:grid-cols-2 gap-2 mt-4">
+    ${ALL_SLOT_KEYS.map(k => builderSlotCard(k)).join("")}
+  </div>
+  ${pickerBlock}`;
+}
+
+function builderSlotCard(slotKey){
+  const slot = SLOT_BY_KEY[slotKey];
+  const p = state.playerRoster[slotKey];
+  if (!p){
+    return `<button data-action="open-builder-slot" data-slot-key="${slotKey}" class="text-left bg-slate-800/60 border border-dashed border-slate-700 hover:border-amber-400 rounded-xl p-3">
+      <div class="text-xs text-slate-500 mb-1">${slot.label}</div>
+      <div class="text-slate-500 text-sm">＋ 選手を指名する</div>
+    </button>`;
+  }
+  return `<div class="bg-slate-800 border border-slate-700 rounded-xl p-3">
+    <div class="flex justify-between items-start">
+      <div class="text-xs text-slate-500">${slot.label}</div>
+      <span class="text-[10px] bg-slate-900 border border-slate-600 rounded px-1.5 py-0.5">${p.team}</span>
+    </div>
+    <div class="font-bold">${p.name}</div>
+    <div class="text-xs text-amber-400 mb-1">${formatMoney(p.salary_current)} ／ ${p.age}歳</div>
+    <div class="flex gap-2">
+      <button data-action="open-builder-slot" data-slot-key="${slotKey}" class="text-xs bg-slate-700 hover:bg-slate-600 px-2 py-1 rounded-lg">変更</button>
+      <button data-action="unassign-slot-builder" data-slot-key="${slotKey}" class="text-xs bg-rose-700 hover:bg-rose-600 px-2 py-1 rounded-lg">外す</button>
+    </div>
+  </div>`;
+}
+
+/* =========================================================
+   打順提案（全モード共通）
+========================================================= */
+function orderScore(p, idx){
+  const label = (idx + 1) + "番";
+  const fit = p.battingOrderFit || [];
+  let score = fit.includes(label) ? 60 : 0;
+  const f = p.fStats;
+  if (idx <= 1) score += f.spd * 0.5 + f.con * 0.5;
+  else if (idx <= 4) score += f.pow * (idx === 3 ? 0.6 : 0.5) + f.con * 0.25 + f.spd * 0.15;
+  else score += f.def * 0.35 + f.con * 0.3 + f.arm * 0.15 + f.pow * 0.2;
+  return score;
+}
+function recommendOrder(roster){
+  const batters = BATTER_SLOT_KEYS.map(k => ({ slotKey:k, p: roster[k] })).filter(x => x.p);
+  const n = batters.length;
+  if (n === 0) return [];
+  const assignment = new Array(n).fill(null);
+  let remaining = batters.slice();
+  const priority = [3,2,4,0,1,5,6,7,8].filter(idx => idx < n);
+  priority.forEach(idx => {
+    let bestI = 0, bestScore = -Infinity;
+    remaining.forEach((b, i) => {
+      const s = orderScore(b.p, idx);
+      if (s > bestScore){ bestScore = s; bestI = i; }
+    });
+    assignment[idx] = remaining[bestI];
+    remaining.splice(bestI, 1);
+  });
+  return assignment.map(a => a.slotKey);
+}
+
+function moveOrder(from, to){
+  if (!state.battingOrder) return;
+  if (to < 0 || to >= state.battingOrder.length) return;
+  const arr = state.battingOrder;
+  [arr[from], arr[to]] = [arr[to], arr[from]];
+  saveGame(state.saveSlot, true);
+  render();
+}
+
+function renderOrder(){
+  if (!state.battingOrder) state.battingOrder = recommendOrder(state.playerRoster);
+  const order = state.battingOrder;
+  const pitcherCards = PITCHER_SLOT_KEYS.map(k => state.playerRoster[k]).filter(Boolean);
+
+  const rows = order.map((slotKey, idx) => {
+    const p = state.playerRoster[slotKey];
+    if (!p) return "";
+    const label = (idx + 1) + "番";
+    const fitMatch = (p.battingOrderFit || []).includes(label);
+    return `
+    <div class="flex items-center gap-2 bg-slate-800 border border-slate-700 rounded-xl p-2 sm:p-3">
+      <div class="w-10 sm:w-12 text-center font-black text-amber-400 text-sm sm:text-lg shrink-0">${label}</div>
+      <div class="flex-1 min-w-0">
+        <div class="font-bold truncate text-sm sm:text-base">${p.name} <span class="text-xs text-slate-500">(${SLOT_BY_KEY[slotKey].label})</span></div>
+        <div class="text-[10px] sm:text-xs text-slate-400">
+          ${p.team} ／ 長打${p.fStats.pow} 巧打${p.fStats.con} 走${p.fStats.spd} 守${p.fStats.def}
+          ${fitMatch ? `<span class="text-emerald-400 ml-1">✓適性一致</span>` : ""}
+        </div>
+      </div>
+      <div class="flex flex-col gap-1 shrink-0">
+        <button data-action="order-up" data-idx="${idx}" class="text-xs bg-slate-700 hover:bg-slate-600 rounded px-2 py-0.5" ${idx===0?"disabled":""}>▲</button>
+        <button data-action="order-down" data-idx="${idx}" class="text-xs bg-slate-700 hover:bg-slate-600 rounded px-2 py-0.5" ${idx===order.length-1?"disabled":""}>▼</button>
+      </div>
+    </div>`;
+  }).join("");
+
+  const nextBtn = (state.mode === "realtime")
+    ? `<button data-action="back-to-builder" class="bg-slate-700 hover:bg-slate-600 font-bold px-5 py-3 rounded-xl">← ロースターに戻る</button>
+       <button data-action="save-current" class="bg-amber-500 hover:bg-amber-400 text-slate-900 font-black px-5 py-3 rounded-xl">💾 保存する</button>`
+    : `<button data-action="go-results" class="bg-amber-500 hover:bg-amber-400 text-slate-900 font-black px-6 py-3 rounded-xl">🏆 結果を見る</button>`;
+
+  return `
+  ${header("編成完了！ 能力値・適性をもとにした推奨打順です（▲▼で並び替え可能）")}
+  <div class="space-y-2 mb-4">
+    ${rows || `<div class="text-slate-500 text-sm">まだ野手が編成されていません</div>`}
+  </div>
+  <div class="mb-4">
+    <div class="text-xs text-slate-400 mb-2">投手陣</div>
+    <div class="grid grid-cols-3 gap-2">
+      ${pitcherCards.map(p => `<div class="bg-slate-800 border border-slate-700 rounded-lg p-2 text-center">
+        <div class="text-[10px] text-slate-500">${p.bestPos[0]}</div>
+        <div class="text-xs sm:text-sm font-bold truncate">${p.name}</div>
+      </div>`).join("") || `<div class="text-slate-500 text-sm col-span-3">投手が未編成です</div>`}
+    </div>
+  </div>
+  <div class="flex flex-wrap gap-3">${nextBtn}</div>`;
+}
+
+/* =========================================================
+   モード②：AI査定エンジン
+========================================================= */
+const KEYWORDS = [
+  { pattern:/フォーム変更|新球種/,       kind:"volatility", value:1.7 },
+  { pattern:/レギュラー定着|出場機会増/, kind:"volume",     value:0.07 },
+  { pattern:/故障明け|リハビリ/,         kind:"downward",   value:-0.10 },
+  { pattern:/移籍1年目|新天地/,          kind:"volatility", value:1.35 },
+];
+const KEYWORD_FLAVOR = [
+  { pattern:/フォーム変更|新球種/,       text:"フォーム改造・新球種の習得が好不調の振れ幅を大きくした。" },
+  { pattern:/レギュラー定着|出場機会増/, text:"出場機会の増加が数字を後押しした。" },
+  { pattern:/故障明け|リハビリ/,         text:"故障からの復帰後は本来のパフォーマンスに苦しんだ場面も見られた。" },
+  { pattern:/移籍1年目|新天地/,          text:"新天地での1年目は、良くも悪くも変動の大きいシーズンとなった。" },
+];
+
+function ageAdjust(age){
+  if (age <= 26) return 0;
+  if (age <= 30) return 0.05;
+  return 0.10;
+}
+function baseScoreOf(p){ return statAvgOf(p) * (1 - ageAdjust(p.age)); }
+function classifyDelta(rel){
+  if (rel > 0.25) return "breakout";
+  if (rel > 0.08) return "up";
+  if (rel > -0.08) return "flat";
+  if (rel > -0.25) return "down";
+  return "crash";
+}
+function raiseRateForTier(tier){
+  switch(tier){
+    case "breakout": return rand(0.8, 3.0);
+    case "up":       return rand(0.10, 0.40);
+    case "flat":     return rand(-0.05, 0.05);
+    case "down":     return rand(-0.40, -0.20);
+    case "crash":    return rand(-0.60, -0.50);
+  }
+}
+function assessPlayer(p, freeText){
+  const text = freeText || "";
+  let volatilityMult = 1, volumeBias = 0, downwardBias = 0;
+  const matched = [];
+  KEYWORDS.forEach(k => {
+    if (k.pattern.test(text)){
+      matched.push(k);
+      if (k.kind === "volatility") volatilityMult *= k.value;
+      if (k.kind === "volume") volumeBias += k.value;
+      if (k.kind === "downward") downwardBias += k.value;
+    }
+  });
+  const base = baseScoreOf(p);
+  const randComponent = (Math.random() * 2 - 1) * 0.20 * volatilityMult;
+  const relDelta = randComponent + volumeBias + downwardBias;
+  const seasonScore = Math.max(0, base * (1 + relDelta));
+  const tier = classifyDelta(relDelta);
+  const raiseRate = raiseRateForTier(tier);
+  const nextSalary = Math.max(400, Math.round(p.salary_current * (1 + raiseRate) / 100) * 100);
+  const midFactor = rand(0.3, 0.65);
+  const midSalary = Math.max(200, Math.round((p.salary_current + (nextSalary - p.salary_current) * midFactor) / 100) * 100);
+  return { base, seasonScore, relDelta, tier, raiseRate, nextSalary, midSalary, matched };
+}
+
+const NEWS_TEMPLATES = {
+  breakout: [
+    (p,a) => `【号外】${p.name}選手（${p.team}）、シーズン中盤に覚醒！ ${formatMoney(p.salary_current)}→${formatMoney(a.nextSalary)}へ急上昇の見通し！`,
+    (p,a) => `${p.name}選手が一気にブレイク。オフの契約更改では${formatMoney(a.nextSalary)}提示が確実視されている。`,
+  ],
+  up: [
+    (p,a) => `${p.name}選手、着実な成長でチームに貢献。年俸は${formatMoney(p.salary_current)}→${formatMoney(a.nextSalary)}の見込み。`,
+    (p,a) => `安定感を増した${p.name}選手。オフの評価は上々で${formatMoney(a.nextSalary)}前後に上積みの模様。`,
+  ],
+  flat: [
+    (p,a) => `${p.name}選手は横ばいの1年。年俸は${formatMoney(p.salary_current)}→${formatMoney(a.nextSalary)}とほぼ変わらない見通し。`,
+  ],
+  down: [
+    (p,a) => `${p.name}選手、不振に苦しんだシーズン。年俸は${formatMoney(p.salary_current)}→${formatMoney(a.nextSalary)}とダウン濃厚。`,
+  ],
+  crash: [
+    (p,a) => `${p.name}選手、出場機会を大きく減らし苦しいシーズンに。年俸は${formatMoney(p.salary_current)}→${formatMoney(a.nextSalary)}と大幅ダウンの見通し。`,
+  ],
+};
+function newsDigestFor(p, a, freeText){
+  const list = NEWS_TEMPLATES[a.tier];
+  const base = list[Math.floor(Math.random() * list.length)](p, a);
+  const flavor = KEYWORD_FLAVOR.filter(k => k.pattern.test(freeText || "")).map(k => k.text).join(" ");
+  return base + (flavor ? " " + flavor : "");
+}
+
+/* =========================================================
+   結果算出
+========================================================= */
+function computeResults(){
+  if (state.mode === "time"){
+    const buildRows = (roster) => ALL_SLOT_KEYS.map(k => {
+      const p = roster[k];
+      return { slotKey:k, player:p, nextSalary:p.salary_past_next, raise: p.salary_past_next - p.salary_current };
+    });
+    const playerRows = buildRows(state.playerRoster);
+    const aiRows = buildRows(state.aiRoster);
+    state.resultsData = {
+      mode:"time", playerRows, aiRows,
+      playerTotal: playerRows.reduce((s,r) => s + r.raise, 0),
+      aiTotal: aiRows.reduce((s,r) => s + r.raise, 0),
+    };
+  } else if (state.mode === "pennant"){
+    const buildRows = (roster, isPlayer) => ALL_SLOT_KEYS.map(k => {
+      const p = roster[k];
+      const freeText = isPlayer ? state.freeTexts[p.id] : null;
+      const a = assessPlayer(p, freeText);
+      return { slotKey:k, player:p, assessment:a, nextSalary:a.nextSalary, raise: a.nextSalary - p.salary_current, digest: newsDigestFor(p, a, freeText) };
+    });
+    const playerRows = buildRows(state.playerRoster, true);
+    const aiRows = buildRows(state.aiRoster, false);
+    state.resultsData = {
+      mode:"pennant", playerRows, aiRows,
+      playerTotal: playerRows.reduce((s,r) => s + r.raise, 0),
+      aiTotal: aiRows.reduce((s,r) => s + r.raise, 0),
+    };
+  }
+  saveGame(state.saveSlot, true);
+}
+
+/* =========================================================
+   結果画面（3タブ構成）
+========================================================= */
+function renderResults(){
+  if (!state.resultsData) computeResults();
+  const data = state.resultsData;
+  const tab = state.resultsTab;
+  const tabBtn = (key, label) => `<button data-action="results-tab" data-tab="${key}" class="tab-btn ${tab===key?"active":""} px-3 py-1.5 rounded-lg text-xs sm:text-sm font-bold bg-slate-800 border border-slate-700">${label}</button>`;
+
+  let body = "";
+  if (tab === "overall") body = renderResultsOverall(data);
+  else if (tab === "ranking") body = renderResultsRanking(data);
+  else body = renderResultsNews(data);
+
+  return `
+  ${header(`${MODE_INFO[state.mode].label} ／ 結果発表`)}
+  <div class="flex gap-2 mb-4 flex-wrap">
+    ${tabBtn("overall", "総合勝敗")}
+    ${tabBtn("ranking", "個別選手ランキング")}
+    ${tabBtn("news", state.mode === "pennant" ? "ニュースダイジェスト" : "選手別詳細")}
+  </div>
+  ${body}
+  <div class="mt-4 flex gap-3">
+    <button data-action="go-home" class="bg-slate-800 hover:bg-slate-700 border border-slate-700 px-4 py-2 rounded-xl text-sm">🏠 ホームに戻る</button>
+  </div>`;
+}
+
+function renderResultsOverall(data){
+  const win = data.playerTotal > data.aiTotal ? "player" : (data.playerTotal < data.aiTotal ? "ai" : "draw");
+  const banner = win === "player"
+    ? `<div class="bg-emerald-500/15 border border-emerald-500/40 text-emerald-300 rounded-xl p-4 text-center font-black text-lg">🏆 あなたの勝利！</div>`
+    : win === "ai"
+    ? `<div class="bg-rose-500/15 border border-rose-500/40 text-rose-300 rounded-xl p-4 text-center font-black text-lg">😢 ライバル球団の勝利…</div>`
+    : `<div class="bg-slate-700/30 border border-slate-600 rounded-xl p-4 text-center font-black text-lg">🤝 引き分け</div>`;
+  return `
+  ${banner}
+  <div class="grid sm:grid-cols-2 gap-3 my-4">
+    <div class="bg-slate-800 border border-slate-700 rounded-xl p-4 text-center">
+      <div class="text-xs text-slate-400">あなたの総昇給額</div>
+      <div class="text-xl sm:text-2xl font-black ${data.playerTotal>=0?"text-emerald-400":"text-rose-400"}">${formatDelta(data.playerTotal)}</div>
+      <div class="text-[10px] text-slate-500 mt-1">残予算 ${formatMoney(BUDGET - state.playerBudgetUsed)}（勝敗には影響しません）</div>
+    </div>
+    <div class="bg-slate-800 border border-slate-700 rounded-xl p-4 text-center">
+      <div class="text-xs text-slate-400">ライバル球団の総昇給額</div>
+      <div class="text-xl sm:text-2xl font-black ${data.aiTotal>=0?"text-emerald-400":"text-rose-400"}">${formatDelta(data.aiTotal)}</div>
+      <div class="text-[10px] text-slate-500 mt-1">残予算 ${formatMoney(BUDGET - state.aiBudgetUsed)}（勝敗には影響しません）</div>
+    </div>
+  </div>
+  <div class="bg-slate-800/60 border border-slate-700 rounded-xl p-3">
+    <canvas id="resultBarChart" height="160"></canvas>
+  </div>
+  <div class="text-[11px] text-slate-500 mt-2">※選手名・年俸・能力値はゲーム用の架空／参考値によるシミュレーション結果です。実際の契約更改とは異なります。</div>`;
+}
+
+function renderResultsRanking(data){
+  const rows = [...data.playerRows.map(r => ({...r, team:"player"})), ...data.aiRows.map(r => ({...r, team:"ai"}))]
+    .sort((a,b) => b.raise - a.raise);
+  return `
+  <div class="space-y-1.5 max-h-[60vh] overflow-y-auto pr-1">
+    ${rows.map((r,i) => `
+    <div class="flex items-center gap-2 bg-slate-800 border border-slate-700 rounded-lg p-2">
+      <div class="w-6 text-center text-xs text-slate-500 shrink-0">${i+1}</div>
+      <div class="flex-1 min-w-0">
+        <div class="text-sm font-bold truncate">${r.player.name} <span class="text-[10px] ${r.team==="player"?"text-sky-400":"text-rose-400"}">${r.team==="player"?"[あなた]":"[ライバル]"}</span></div>
+        <div class="text-[10px] text-slate-500">${r.player.team} ／ ${SLOT_BY_KEY[r.slotKey].label} ／ ${formatMoney(r.player.salary_current)} → ${formatMoney(r.nextSalary)}</div>
+      </div>
+      <div class="text-sm font-black ${r.raise>=0?"text-emerald-400":"text-rose-400"} shrink-0">${formatDelta(r.raise)}</div>
+    </div>`).join("")}
+  </div>`;
+}
+
+function renderResultsNews(data){
+  const allRows = [...data.playerRows.map(r => ({...r, team:"player"})), ...data.aiRows.map(r => ({...r, team:"ai"}))];
+  if (state.mode === "pennant"){
+    const selectedId = state.newsSelectedPlayerId || allRows[0].player.id;
+    return `
+    <div class="mb-3">
+      <label class="text-xs text-slate-400 block mb-1">年俸推移チャートで見る選手</label>
+      <select data-role="news-player-select" class="w-full bg-slate-800 border border-slate-700 rounded-lg p-2 text-sm">
+        ${allRows.map(r => `<option value="${r.player.id}" ${String(r.player.id)===String(selectedId)?"selected":""}>${r.player.name}（${r.team==="player"?"あなた":"ライバル"} ／ ${SLOT_BY_KEY[r.slotKey].label}）</option>`).join("")}
+      </select>
+    </div>
+    <div class="bg-slate-800/60 border border-slate-700 rounded-xl p-3 mb-4">
+      <canvas id="newsLineChart" height="160"></canvas>
+    </div>
+    <div class="space-y-2 max-h-[45vh] overflow-y-auto pr-1">
+      ${allRows.map(r => `
+      <div class="bg-slate-800 border border-slate-700 rounded-xl p-3">
+        <div class="text-xs ${r.team==="player"?"text-sky-400":"text-rose-400"} font-bold mb-1">${r.team==="player"?"あなたのチーム":"ライバル球団"} ／ ${SLOT_BY_KEY[r.slotKey].label} ／ ${r.player.name}</div>
+        <div class="text-sm leading-relaxed">${r.digest}</div>
+      </div>`).join("")}
+    </div>`;
+  }
+  const sorted = allRows.slice().sort((a,b) => ALL_SLOT_KEYS.indexOf(a.slotKey) - ALL_SLOT_KEYS.indexOf(b.slotKey) || (a.team>b.team?1:-1));
+  return `<div class="space-y-1.5 max-h-[60vh] overflow-y-auto pr-1">
+    ${sorted.map(r => `
+    <div class="flex items-center justify-between bg-slate-800 border border-slate-700 rounded-lg p-2 gap-2">
+      <div class="text-xs">
+        <span class="${r.team==="player"?"text-sky-400":"text-rose-400"} font-bold">${r.team==="player"?"あなた":"ライバル"}</span>
+        ／ ${SLOT_BY_KEY[r.slotKey].label} ／ ${r.player.name}
+      </div>
+      <div class="text-xs text-slate-400 shrink-0">${formatMoney(r.player.salary_current)} → ${formatMoney(r.nextSalary)}</div>
+    </div>`).join("")}
+  </div>`;
+}
+
+/* =========================================================
+   Chart.js 描画
+========================================================= */
+const charts = {};
+function makeChart(id, config){
+  const canvas = document.getElementById(id);
+  if (!canvas) return;
+  if (charts[id]){ charts[id].destroy(); delete charts[id]; }
+  charts[id] = new Chart(canvas.getContext("2d"), config);
+}
+function radarConfigFor(p){
+  const isPitcher = p.pos === "投手";
+  const labels = isPitcher ? ["球威","制球","スタミナ"] : ["長打力","巧打","走力","守備","肩"];
+  const data = isPitcher
+    ? [p.pStats.pow, p.pStats.con, p.pStats.sta]
+    : [p.fStats.pow, p.fStats.con, p.fStats.spd, p.fStats.def, p.fStats.arm];
+  return {
+    type:"radar",
+    data:{ labels, datasets:[{ label:p.name, data, backgroundColor:"rgba(250,204,21,0.25)", borderColor:"#facc15", pointBackgroundColor:"#facc15" }] },
+    options:{
+      responsive:true,
+      scales:{ r:{ min:0, max:99, ticks:{ color:"#94a3b8", backdropColor:"transparent", stepSize:20 }, grid:{ color:"#334155" }, angleLines:{ color:"#334155" }, pointLabels:{ color:"#e2e8f0", font:{ size:11 } } } },
+      plugins:{ legend:{ display:false } },
+    },
+  };
+}
+function barConfigForResults(data){
+  return {
+    type:"bar",
+    data:{ labels:["あなた","ライバル球団"], datasets:[{ label:"総昇給額（万円）", data:[data.playerTotal, data.aiTotal], backgroundColor:["#38bdf8","#fb7185"] }] },
+    options:{
+      responsive:true,
+      plugins:{ legend:{ display:false } },
+      scales:{ y:{ ticks:{ color:"#94a3b8" }, grid:{ color:"#334155" } }, x:{ ticks:{ color:"#94a3b8" }, grid:{ display:false } } },
+    },
+  };
+}
+function lineConfigForPlayer(row){
+  const p = row.player;
+  const points = state.mode === "pennant"
+    ? [["開幕前", p.salary_current], ["シーズン中盤", row.assessment.midSalary], ["翌年", row.nextSalary]]
+    : [["開幕前", p.salary_current], ["翌年", row.nextSalary]];
+  return {
+    type:"line",
+    data:{ labels: points.map(pt => pt[0]), datasets:[{ label:p.name + " 年俸推移（万円）", data: points.map(pt => pt[1]), borderColor:"#facc15", backgroundColor:"rgba(250,204,21,0.2)", tension:0.3, fill:true }] },
+    options:{
+      responsive:true,
+      plugins:{ legend:{ labels:{ color:"#e2e8f0" } } },
+      scales:{ y:{ ticks:{ color:"#94a3b8" }, grid:{ color:"#334155" } }, x:{ ticks:{ color:"#94a3b8" }, grid:{ display:false } } },
+    },
+  };
+}
+
+function afterRender(){
+  if (state.screen === "draft" && state.pendingPick && document.getElementById("pickRadar")){
+    makeChart("pickRadar", radarConfigFor(PLAYERS_BY_ID[state.pendingPick]));
+  }
+  if (state.screen === "results"){
+    const data = state.resultsData;
+    if (state.resultsTab === "overall" && document.getElementById("resultBarChart")){
+      makeChart("resultBarChart", barConfigForResults(data));
+    }
+    if (state.resultsTab === "news" && state.mode === "pennant" && document.getElementById("newsLineChart")){
+      const allRows = [...data.playerRows, ...data.aiRows];
+      const selId = state.newsSelectedPlayerId || allRows[0].player.id;
+      const row = allRows.find(r => String(r.player.id) === String(selId)) || allRows[0];
+      makeChart("newsLineChart", lineConfigForPlayer(row));
+    }
+  }
+}
+
+/* =========================================================
+   イベント処理（イベントデリゲーション）
+========================================================= */
+function startDraftFlow(){
+  state.round = 1;
+  state.playerRoster = freshRoster();
+  state.aiRoster = freshRoster();
+  state.playerBudgetUsed = 0;
+  state.aiBudgetUsed = 0;
+  state.draftedIds = []; syncDraftedSet();
+  state.pendingPick = null;
+  state.roundPlayerLocked = false;
+  state.roundAiLocked = false;
+  state.roundReveal = null;
+  state.freeTexts = {};
+  state.battingOrder = null;
+  state.resultsData = null;
+  state.screen = "draft";
+  render();
+}
+function startBuilderFlow(){
+  state.round = 1;
+  state.playerRoster = freshRoster();
+  state.aiRoster = freshRoster();
+  state.playerBudgetUsed = 0;
+  state.aiBudgetUsed = 0;
+  state.battingOrder = null;
+  state.screen = "builder";
+  render();
+}
+
+document.body.addEventListener("click", (e) => {
+  const el = e.target.closest("[data-action]");
+  if (!el) return;
+  const action = el.dataset.action;
+  const playerId = el.dataset.playerId ? Number(el.dataset.playerId) : null;
+
+  switch(action){
+    case "go-home":
+    case "back-to-home":
+      goHome();
+      break;
+    case "choose-mode": {
+      state.mode = el.dataset.mode;
+      if (state.mode === "realtime"){ startBuilderFlow(); }
+      else { state.screen = "aiselect"; render(); }
+      break;
+    }
+    case "choose-ai": {
+      state.aiType = el.dataset.ai;
+      startDraftFlow();
+      break;
+    }
+    case "continue-save": {
+      const slot = Number(el.dataset.slot);
+      loadGame(slot);
+      break;
+    }
+    case "delete-save": {
+      const slot = Number(el.dataset.slot);
+      deleteSave(slot);
+      break;
+    }
+    case "select-candidate":
+      selectCandidate(playerId);
+      break;
+    case "confirm-pick":
+      confirmPick();
+      break;
+    case "advance-round":
+      advanceRound();
+      break;
+    case "save-current":
+      saveGame(state.saveSlot);
+      break;
+    case "go-order":
+      state.battingOrder = null;
+      state.screen = "order";
+      render();
+      break;
+    case "go-results":
+      state.screen = "results";
+      state.resultsData = null;
+      state.resultsTab = "overall";
+      render();
+      break;
+    case "back-to-builder":
+      state.screen = "builder";
+      render();
+      break;
+    case "results-tab":
+      state.resultsTab = el.dataset.tab;
+      render();
+      break;
+    case "open-builder-slot":
+      state.builderPickingSlot = el.dataset.slotKey;
+      render();
+      break;
+    case "close-builder-picker":
+      state.builderPickingSlot = null;
+      render();
+      break;
+    case "assign-builder-player":
+      assignBuilderPlayer(el.dataset.slotKey, playerId);
+      break;
+    case "unassign-slot-builder":
+      unassignBuilderSlot(el.dataset.slotKey);
+      break;
+    case "order-up":
+      moveOrder(Number(el.dataset.idx), Number(el.dataset.idx) - 1);
+      break;
+    case "order-down":
+      moveOrder(Number(el.dataset.idx), Number(el.dataset.idx) + 1);
+      break;
+  }
+});
+
+document.body.addEventListener("click", (e) => {
+  if (e.target.dataset && e.target.dataset.role === "builder-picker-backdrop"){
+    state.builderPickingSlot = null;
+    render();
+  }
+});
+
+document.body.addEventListener("input", (e) => {
+  if (e.target.matches('[data-role="free-text"]')){
+    state.freeTextDraft = e.target.value;
+  }
+});
+
+document.body.addEventListener("change", (e) => {
+  if (e.target.matches('[data-role="news-player-select"]')){
+    state.newsSelectedPlayerId = Number(e.target.value);
+    const data = state.resultsData;
+    if (data){
+      const allRows = [...data.playerRows, ...data.aiRows];
+      const row = allRows.find(r => String(r.player.id) === String(state.newsSelectedPlayerId));
+      if (row) makeChart("newsLineChart", lineConfigForPlayer(row));
+    }
+  }
+});
+
+/* ---- ドラッグ&ドロップ（指名候補カード → 自チーム指名枠 専用） ---- */
+document.body.addEventListener("dragstart", (e) => {
+  const card = e.target.closest('[data-role="candidate-card"][draggable="true"]');
+  if (!card) return;
+  e.dataTransfer.setData("text/plain", card.dataset.playerId);
+  e.dataTransfer.effectAllowed = "move";
+});
+document.body.addEventListener("dragover", (e) => {
+  const zone = e.target.closest('[data-role="roster-slot-drop"]');
+  if (!zone) return;
+  e.preventDefault();
+  zone.classList.add("dragover");
+});
+document.body.addEventListener("dragleave", (e) => {
+  const zone = e.target.closest('[data-role="roster-slot-drop"]');
+  if (!zone) return;
+  zone.classList.remove("dragover");
+});
+document.body.addEventListener("drop", (e) => {
+  const zone = e.target.closest('[data-role="roster-slot-drop"]');
+  if (!zone) return;
+  e.preventDefault();
+  zone.classList.remove("dragover");
+  const idStr = e.dataTransfer.getData("text/plain");
+  if (!idStr) return;
+  const slot = ROUND_SLOTS[state.round - 1];
+  if (zone.dataset.slotKey !== slot.slotKey){
+    toast("今の巡で指名できる枠にドラッグしてください", "warn");
+    return;
+  }
+  selectCandidate(Number(idStr));
+});
+
+/* =========================================================
+   起動
+========================================================= */
+render();
+</script>
+</body>
+</html>
+
