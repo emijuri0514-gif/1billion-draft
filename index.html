@@ -147,6 +147,7 @@ function defaultState(){
     resultsData: null,
     newsSelectedPlayerId: null,
     builderPickingSlot: null, // realtime mode: 現在選択中のスロット
+    candidateFilter: { search:"", team:"", sort:"salary_asc" }, // 候補選手一覧の検索・絞り込み・並び替え
     updatedAt: null,
   };
 }
@@ -231,6 +232,12 @@ function listSaveSummaries(){
 ========================================================= */
 const app = document.getElementById("app");
 function render(){
+  // 検索ボックスにフォーカス中の場合、再描画後もフォーカス／カーソル位置を復元する
+  const active = document.activeElement;
+  const wasSearchFocused = active && active.matches && active.matches('[data-role="candidate-search"]');
+  const selStart = wasSearchFocused ? active.selectionStart : null;
+  const selEnd = wasSearchFocused ? active.selectionEnd : null;
+
   let html = "";
   switch(state.screen){
     case "home": html = renderHome(); break;
@@ -243,6 +250,14 @@ function render(){
   }
   app.innerHTML = `<div class="fade-in">${html}</div>`;
   afterRender();
+
+  if (wasSearchFocused){
+    const el = document.querySelector('[data-role="candidate-search"]');
+    if (el){
+      el.focus();
+      try { el.setSelectionRange(selStart, selEnd); } catch(e){}
+    }
+  }
 }
 
 function goHome(){ state = defaultState(); render(); }
@@ -384,6 +399,39 @@ function renderAiSelect(){
 function candidatePoolFor(slot, excludeIds){
   return activePlayers().filter(p => p.pos === slot.pos && p.bestPos.includes(slot.bestPos) && !excludeIds.has(p.id));
 }
+
+/* ---- 候補選手一覧：検索・球団絞り込み・並び替え ---- */
+const CANDIDATE_SORTS = {
+  salary_asc:  { label:"年俸が安い順", fn:(a,b) => a.salary_current - b.salary_current },
+  salary_desc: { label:"年俸が高い順", fn:(a,b) => b.salary_current - a.salary_current },
+  team:        { label:"球団順（あいうえお）", fn:(a,b) => a.team.localeCompare(b.team, "ja") || a.salary_current - b.salary_current },
+  name:        { label:"名前順（あいうえお）", fn:(a,b) => a.name.localeCompare(b.name, "ja") },
+};
+function applyCandidateFilter(pool, filter){
+  let list = pool;
+  const q = (filter.search || "").trim();
+  if (q) list = list.filter(p => p.name.includes(q) || p.team.includes(q));
+  if (filter.team) list = list.filter(p => p.team === filter.team);
+  const sortDef = CANDIDATE_SORTS[filter.sort] || CANDIDATE_SORTS.salary_asc;
+  return list.slice().sort(sortDef.fn);
+}
+function candidateFilterToolbar(fullPool, filter){
+  const teams = [...new Set(fullPool.map(p => p.team))].sort((a,b) => a.localeCompare(b, "ja"));
+  const teamOptions = `<option value="">球団：すべて</option>` +
+    teams.map(t => `<option value="${t}" ${filter.team===t?"selected":""}>${t}</option>`).join("");
+  const sortOptions = Object.entries(CANDIDATE_SORTS)
+    .map(([key, def]) => `<option value="${key}" ${filter.sort===key?"selected":""}>${def.label}</option>`).join("");
+  const hasFilter = !!(filter.search || filter.team);
+  return `
+  <div class="flex flex-wrap gap-2 mb-2" data-role="candidate-toolbar">
+    <input type="text" data-role="candidate-search" value="${(filter.search||"").replace(/"/g,"&quot;")}" placeholder="🔍 選手名・球団名で検索"
+      class="flex-1 min-w-[140px] bg-slate-900 border border-slate-700 rounded-lg px-2 py-1.5 text-xs sm:text-sm" />
+    <select data-role="candidate-team-select" class="bg-slate-900 border border-slate-700 rounded-lg px-2 py-1.5 text-xs sm:text-sm">${teamOptions}</select>
+    <select data-role="candidate-sort-select" class="bg-slate-900 border border-slate-700 rounded-lg px-2 py-1.5 text-xs sm:text-sm">${sortOptions}</select>
+    ${hasFilter ? `<button type="button" data-action="clear-candidate-filter" class="text-xs bg-slate-800 hover:bg-slate-700 border border-slate-700 px-2 py-1.5 rounded-lg">✕ クリア</button>` : ""}
+  </div>`;
+}
+
 function minRemainingCostFrom(startRoundIdx, excludeIds){
   let total = 0;
   for (let r = startRoundIdx; r <= 12; r++){
@@ -564,8 +612,8 @@ function rosterGrid(roster, opts){
 function renderDraft(){
   const slot = ROUND_SLOTS[state.round - 1];
   const excludeIds = new Set(draftedSet);
-  let pool = candidatePoolFor(slot, excludeIds);
-  pool = pool.sort((a,b) => a.salary_current - b.salary_current);
+  const fullPool = candidatePoolFor(slot, excludeIds);
+  const pool = applyCandidateFilter(fullPool, state.candidateFilter);
 
   const waiverModal = state.waiver ? renderWaiverModal() : "";
 
@@ -627,12 +675,13 @@ function renderDraft(){
 
   <div class="grid lg:grid-cols-3 gap-3">
     <div class="lg:col-span-2">
-      <div class="text-xs text-slate-400 mb-2">指名候補（${slot.label} ／ ${pool.length}名）</div>
-      <div class="grid sm:grid-cols-2 gap-2 max-h-[52vh] overflow-y-auto pr-1">
-        ${pool.map(p => {
+      <div class="text-xs text-slate-400 mb-2">指名候補（${slot.label} ／ ${pool.length} / ${fullPool.length}名）</div>
+      ${candidateFilterToolbar(fullPool, state.candidateFilter)}
+      <div class="grid sm:grid-cols-2 gap-2 overflow-y-auto pr-1" style="max-height:52vh">
+        ${pool.length ? pool.map(p => {
           const disabled = state.roundPlayerLocked || p.salary_current > (BUDGET - state.playerBudgetUsed);
           return playerCard(p, { disabled, selected: state.pendingPick === p.id, draggable: true });
-        }).join("")}
+        }).join("") : `<div class="col-span-full text-center text-slate-500 text-sm py-6">条件に一致する選手がいません</div>`}
       </div>
     </div>
     <div class="space-y-3">
@@ -708,24 +757,25 @@ function renderBuilder(){
   let pickerBlock = "";
   if (pickingSlotKey){
     const slot = SLOT_BY_KEY[pickingSlotKey];
-    const pool = PLAYERS.filter(p => p.pos === slot.pos && p.bestPos.includes(slot.bestPos) && !assignedIds.has(p.id))
-      .sort((a,b) => a.salary_current - b.salary_current);
+    const fullPool = PLAYERS.filter(p => p.pos === slot.pos && p.bestPos.includes(slot.bestPos) && !assignedIds.has(p.id));
+    const pool = applyCandidateFilter(fullPool, state.candidateFilter);
     const prev = state.playerRoster[pickingSlotKey];
     const usedWithoutSlot = state.playerBudgetUsed - (prev ? prev.salary_current : 0);
     pickerBlock = `
     <div class="fixed inset-0 bg-black/70 flex items-end sm:items-center justify-center z-50 p-2 sm:p-4" data-role="builder-picker-backdrop">
-      <div class="bg-slate-900 border border-slate-700 rounded-2xl p-4 max-w-3xl w-full max-h-[85vh] overflow-y-auto">
+      <div class="bg-slate-900 border border-slate-700 rounded-2xl p-4 max-w-3xl w-full overflow-y-auto" style="max-height:85vh">
         <div class="flex justify-between items-center mb-3">
-          <div class="font-black">${slot.label} を選択</div>
+          <div class="font-black">${slot.label} を選択（${pool.length} / ${fullPool.length}名）</div>
           <button data-action="close-builder-picker" class="text-slate-400 hover:text-white text-xl leading-none">×</button>
         </div>
+        ${candidateFilterToolbar(fullPool, state.candidateFilter)}
         <div class="grid sm:grid-cols-2 gap-2">
-          ${pool.map(p => playerCard(p, {
+          ${pool.length ? pool.map(p => playerCard(p, {
             disabled: usedWithoutSlot + p.salary_current > BUDGET,
             selectAction: "assign-builder-player",
             selectLabel: "この選手を編成する",
             extraAttrs: `data-slot-key="${pickingSlotKey}"`,
-          })).join("")}
+          })).join("") : `<div class="col-span-full text-center text-slate-500 text-sm py-6">条件に一致する選手がいません</div>`}
         </div>
       </div>
     </div>`;
@@ -1012,7 +1062,7 @@ function renderResultsRanking(data){
   const rows = [...data.playerRows.map(r => ({...r, team:"player"})), ...data.aiRows.map(r => ({...r, team:"ai"}))]
     .sort((a,b) => b.raise - a.raise);
   return `
-  <div class="space-y-1.5 max-h-[60vh] overflow-y-auto pr-1">
+  <div class="space-y-1.5 overflow-y-auto pr-1" style="max-height:60vh">
     ${rows.map((r,i) => `
     <div class="flex items-center gap-2 bg-slate-800 border border-slate-700 rounded-lg p-2">
       <div class="w-6 text-center text-xs text-slate-500 shrink-0">${i+1}</div>
@@ -1039,7 +1089,7 @@ function renderResultsNews(data){
     <div class="bg-slate-800/60 border border-slate-700 rounded-xl p-3 mb-4">
       <canvas id="newsLineChart" height="160"></canvas>
     </div>
-    <div class="space-y-2 max-h-[45vh] overflow-y-auto pr-1">
+    <div class="space-y-2 overflow-y-auto pr-1" style="max-height:45vh">
       ${allRows.map(r => `
       <div class="bg-slate-800 border border-slate-700 rounded-xl p-3">
         <div class="text-xs ${r.team==="player"?"text-sky-400":"text-rose-400"} font-bold mb-1">${r.team==="player"?"あなたのチーム":"ライバル球団"} ／ ${SLOT_BY_KEY[r.slotKey].label} ／ ${r.player.name}</div>
@@ -1048,7 +1098,7 @@ function renderResultsNews(data){
     </div>`;
   }
   const sorted = allRows.slice().sort((a,b) => ALL_SLOT_KEYS.indexOf(a.slotKey) - ALL_SLOT_KEYS.indexOf(b.slotKey) || (a.team>b.team?1:-1));
-  return `<div class="space-y-1.5 max-h-[60vh] overflow-y-auto pr-1">
+  return `<div class="space-y-1.5 overflow-y-auto pr-1" style="max-height:60vh">
     ${sorted.map(r => `
     <div class="flex items-center justify-between bg-slate-800 border border-slate-700 rounded-lg p-2 gap-2">
       <div class="text-xs">
@@ -1206,6 +1256,11 @@ document.body.addEventListener("click", (e) => {
       state.resultsTab = el.dataset.tab;
       render();
       break;
+    case "clear-candidate-filter":
+      state.candidateFilter.search = "";
+      state.candidateFilter.team = "";
+      render();
+      break;
     case "open-builder-slot":
       state.builderPickingSlot = el.dataset.slotKey;
       render();
@@ -1240,6 +1295,10 @@ document.body.addEventListener("input", (e) => {
   if (e.target.matches('[data-role="free-text"]')){
     state.freeTextDraft = e.target.value;
   }
+  if (e.target.matches('[data-role="candidate-search"]')){
+    state.candidateFilter.search = e.target.value;
+    render();
+  }
 });
 
 document.body.addEventListener("change", (e) => {
@@ -1251,6 +1310,14 @@ document.body.addEventListener("change", (e) => {
       const row = allRows.find(r => String(r.player.id) === String(state.newsSelectedPlayerId));
       if (row) makeChart("newsLineChart", lineConfigForPlayer(row));
     }
+  }
+  if (e.target.matches('[data-role="candidate-team-select"]')){
+    state.candidateFilter.team = e.target.value;
+    render();
+  }
+  if (e.target.matches('[data-role="candidate-sort-select"]')){
+    state.candidateFilter.sort = e.target.value;
+    render();
   }
 });
 
