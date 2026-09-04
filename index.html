@@ -684,7 +684,7 @@ function renderDraft(){
         }).join("") : `<div class="col-span-full text-center text-slate-500 text-sm py-6">条件に一致する選手がいません</div>`}
       </div>
     </div>
-    <div class="space-y-3">
+    <div class="space-y-3 hidden lg:block">
       ${selected ? playerDetailBlock(selected) : `<div class="bg-slate-800/40 border border-dashed border-slate-700 rounded-xl p-4 text-center text-xs text-slate-500">候補を選ぶと詳細を表示します</div>`}
       ${freeTextBlock}
       <button data-action="confirm-pick" ${(!selected || state.roundPlayerLocked) ? "disabled" : ""}
@@ -693,6 +693,25 @@ function renderDraft(){
       </button>
     </div>
   </div>
+  <div class="lg:hidden space-y-3 mt-3">
+    ${selected ? playerDetailBlock(selected) : ""}
+    ${selected ? freeTextBlock : ""}
+  </div>
+  ${(!state.roundPlayerLocked) ? `
+  <div class="lg:hidden sticky z-30 mt-3 -mx-3 sm:-mx-4 px-3 sm:px-4 py-2.5 bg-slate-950 border-t-2 border-amber-500" style="bottom:3.5rem; box-shadow:0 -4px 16px rgba(0,0,0,0.5)">
+    <div class="flex items-center justify-between gap-3">
+      <div class="min-w-0 flex-1">
+        ${selected ? `
+        <div class="text-[10px] text-slate-400">選択中の候補</div>
+        <div class="text-sm font-bold truncate">${selected.name} <span class="text-amber-400">${formatMoney(selected.salary_current)}</span></div>` : `
+        <div class="text-xs text-slate-400">候補カードの「この選手を選ぶ」を押してください</div>`}
+      </div>
+      <button data-action="confirm-pick" ${!selected ? "disabled" : ""}
+        class="shrink-0 font-black px-4 py-2.5 rounded-xl text-sm ${!selected ? "bg-slate-700 text-slate-500 cursor-not-allowed" : "bg-amber-500 hover:bg-amber-400 text-slate-900"}">
+        ✅ 確定する
+      </button>
+    </div>
+  </div>` : ""}
   ${waiverModal}`;
 }
 
