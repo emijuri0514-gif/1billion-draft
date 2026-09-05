@@ -453,8 +453,9 @@ function aiScore(aiType, p, aiRoster){
     return score + jitter;
   }
   if (aiType === "roman"){
-    // 1,000万〜2,000万円未満の超格安選手を最優先
-    let score = salary < 2000 ? (100 - salary / 25) : (60 - salary / 400);
+    // 1,000万〜2,000万円帯（1,500万円前後）を最優先。安すぎる選手も高すぎる選手も評価を下げ、
+    // 単なる最安値選択にならないようにする（＝予算を極端に余らせない）
+    let score = 100 - Math.abs(salary - 1500) / 12;
     return score + jitter;
   }
   if (aiType === "star"){
@@ -858,6 +859,16 @@ function moveOrder(from, to){
   saveGame(state.saveSlot, true);
   render();
 }
+function moveOrderToPosition(from, to){
+  if (!state.battingOrder) return;
+  const arr = state.battingOrder;
+  to = clamp(to, 0, arr.length - 1);
+  if (from === to) return;
+  const [item] = arr.splice(from, 1);
+  arr.splice(to, 0, item);
+  saveGame(state.saveSlot, true);
+  render();
+}
 
 function renderOrder(){
   if (!state.battingOrder) state.battingOrder = recommendOrder(state.playerRoster);
@@ -870,7 +881,10 @@ function renderOrder(){
     const label = (idx + 1) + "番";
     return `
     <div class="flex items-center gap-2 bg-slate-800 border border-slate-700 rounded-xl p-2 sm:p-3">
-      <div class="w-10 sm:w-12 text-center font-black text-amber-400 text-sm sm:text-lg shrink-0">${label}</div>
+      <select data-role="order-position-select" data-idx="${idx}" aria-label="${label}の打順を変更"
+        class="w-14 sm:w-16 text-center font-black text-amber-400 text-sm sm:text-lg shrink-0 bg-slate-900 border border-slate-700 rounded-lg py-1">
+        ${order.map((_, i) => `<option value="${i}" ${i===idx?"selected":""}>${i+1}番</option>`).join("")}
+      </select>
       <div class="flex-1 min-w-0">
         <div class="font-bold truncate text-sm sm:text-base">${p.name} <span class="text-xs text-slate-500">(${SLOT_BY_KEY[slotKey].label})</span></div>
         <div class="text-[10px] sm:text-xs text-slate-400">${p.team} ／ ${formatMoney(p.salary_current)} ／ ${p.age}歳</div>
@@ -888,7 +902,7 @@ function renderOrder(){
     : `<button data-action="go-results" class="bg-amber-500 hover:bg-amber-400 text-slate-900 font-black px-6 py-3 rounded-xl">🏆 結果を見る</button>`;
 
   return `
-  ${header("編成完了！ 年俸順の初期並びです。▲▼で自由に打順を組み替えられます")}
+  ${header("編成完了！ 年俸順の初期並びです。番号を選ぶと即座に打順を入れ替えられます（▲▼は1つ隣との入れ替え）")}
   <div class="space-y-2 mb-4">
     ${rows || `<div class="text-slate-500 text-sm">まだ野手が編成されていません</div>`}
   </div>
@@ -1337,6 +1351,9 @@ document.body.addEventListener("change", (e) => {
   if (e.target.matches('[data-role="candidate-sort-select"]')){
     state.candidateFilter.sort = e.target.value;
     render();
+  }
+  if (e.target.matches('[data-role="order-position-select"]')){
+    moveOrderToPosition(Number(e.target.dataset.idx), Number(e.target.value));
   }
 });
 
