@@ -901,8 +901,17 @@ function renderOrder(){
        <button data-action="save-current" class="bg-amber-500 hover:bg-amber-400 text-slate-900 font-black px-5 py-3 rounded-xl">💾 保存する</button>`
     : `<button data-action="go-results" class="bg-amber-500 hover:bg-amber-400 text-slate-900 font-black px-6 py-3 rounded-xl">🏆 結果を見る</button>`;
 
+  const orderHint = state.mode === "pennant"
+    ? `<div class="bg-amber-500/10 border border-amber-500/40 text-amber-300 text-xs sm:text-sm rounded-xl p-3 mb-4">
+        💡 年俸が高い選手ほど3〜5番（特に4番）に近いほど査定にプラス補正、離れているほどマイナス補正がかかります。年俸ランクに見合った打順を組むと総昇給額が伸びやすくなります。
+      </div>`
+    : `<div class="bg-slate-800/40 border border-slate-700 text-slate-400 text-xs sm:text-sm rounded-xl p-3 mb-4">
+        ℹ️ このモードでは打順は編成の記録用で、成績・勝敗には影響しません（打順が結果に影響するのはモード②のみです）。
+      </div>`;
+
   return `
   ${header("編成完了！ 年俸順の初期並びです。番号を選ぶと即座に打順を入れ替えられます（▲▼は1つ隣との入れ替え）")}
+  ${orderHint}
   <div class="space-y-2 mb-4">
     ${rows || `<div class="text-slate-500 text-sm">まだ野手が編成されていません</div>`}
   </div>
@@ -955,7 +964,7 @@ function raiseRateForTier(tier){
     case "crash":    return rand(-0.60, -0.50);
   }
 }
-function assessPlayer(p, freeText){
+function assessPlayer(p, freeText, orderBonus){
   const text = freeText || "";
   let volatilityMult = 1, volumeBias = 0, downwardBias = 0;
   const matched = [];
@@ -968,13 +977,34 @@ function assessPlayer(p, freeText){
     }
   });
   const randComponent = (Math.random() * 2 - 1) * 0.20 * volatilityMult;
-  const relDelta = randComponent + volumeBias + downwardBias - ageAdjust(p.age) * 0.6;
+  const relDelta = randComponent + volumeBias + downwardBias - ageAdjust(p.age) * 0.6 + (orderBonus || 0);
   const tier = classifyDelta(relDelta);
   const raiseRate = raiseRateForTier(tier);
   const nextSalary = Math.max(400, Math.round(p.salary_current * (1 + raiseRate) / 100) * 100);
   const midFactor = rand(0.3, 0.65);
   const midSalary = Math.max(200, Math.round((p.salary_current + (nextSalary - p.salary_current) * midFactor) / 100) * 100);
   return { relDelta, tier, raiseRate, nextSalary, midSalary, matched };
+}
+
+/* ---- 打順評価（モード②のみ）：年俸ランクと打順の「格」の一致度を評価 ----
+   4番(cleanup)を頂点に3〜5番を最重要、以降は端に行くほど出場機会・注目度が下がるとみなし、
+   年俸が高い選手ほど中軸に近いほど加点、離れているほど減点する（＝ゼロサム的な再配分） */
+const IDEAL_SLOT_FOR_SALARY_RANK = [3, 2, 4, 0, 1, 5, 6, 7, 8];
+function battingOrderBonusMap(roster, order){
+  const bonusBySlot = {};
+  const batters = BATTER_SLOT_KEYS.map(k => roster[k]).filter(Boolean);
+  if (!order || order.length !== batters.length) return bonusBySlot;
+  const ranked = batters.slice().sort((a,b) => b.salary_current - a.salary_current);
+  const rankOf = new Map(ranked.map((p, i) => [p.id, i]));
+  order.forEach((slotKey, actualIdx) => {
+    const p = roster[slotKey];
+    if (!p) return;
+    const rank = rankOf.get(p.id);
+    const idealIdx = IDEAL_SLOT_FOR_SALARY_RANK[rank] ?? actualIdx;
+    const distance = Math.abs(actualIdx - idealIdx);
+    bonusBySlot[slotKey] = -distance * 0.015;
+  });
+  return bonusBySlot;
 }
 
 const NEWS_TEMPLATES = {
@@ -1020,10 +1050,13 @@ function computeResults(){
       aiTotal: aiRows.reduce((s,r) => s + r.raise, 0),
     };
   } else if (state.mode === "pennant"){
+    if (!state.battingOrder) state.battingOrder = recommendOrder(state.playerRoster);
+    const orderBonusBySlot = battingOrderBonusMap(state.playerRoster, state.battingOrder);
     const buildRows = (roster, isPlayer) => ALL_SLOT_KEYS.map(k => {
       const p = roster[k];
       const freeText = isPlayer ? state.freeTexts[p.id] : null;
-      const a = assessPlayer(p, freeText);
+      const orderBonus = isPlayer ? orderBonusBySlot[k] : null;
+      const a = assessPlayer(p, freeText, orderBonus);
       return { slotKey:k, player:p, assessment:a, nextSalary:a.nextSalary, raise: a.nextSalary - p.salary_current, digest: newsDigestFor(p, a, freeText) };
     });
     const playerRows = buildRows(state.playerRoster, true);
