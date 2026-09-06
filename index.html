@@ -6,7 +6,6 @@
 <title>⚾ 10億年俸ドラフト 〜NPB AI対戦マネジメント〜</title>
 <script src="https://cdn.tailwindcss.com"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-<script src="https://bernardo-castilho.github.io/DragDropTouch/DragDropTouch.js"></script>
 <style>
   html,body{ background:#0f172a; }
   body{ font-family: -apple-system, BlinkMacSystemFont, "Hiragino Kaku Gothic ProN", "Yu Gothic", sans-serif; overscroll-behavior:none; }
@@ -20,8 +19,6 @@
   .card:active{ transform:scale(0.98); }
   .card.selected{ box-shadow:0 0 0 3px #facc15; }
   .card.disabled{ opacity:.35; filter:grayscale(1); cursor:not-allowed; pointer-events:none; }
-  .dropzone{ transition: box-shadow .15s, background-color .15s; }
-  .dropzone.dragover{ box-shadow:0 0 0 3px #34d399; background-color:rgba(52,211,153,0.12); }
   .tab-btn.active{ background:#facc15; color:#1e293b; }
   .stat-bar-track{ background:#1e293b; border-radius:9999px; overflow:hidden; height:6px; }
   .stat-bar-fill{ height:100%; border-radius:9999px; }
@@ -330,13 +327,12 @@ function playerCard(p, opts){
   opts = opts || {};
   const disabled = !!opts.disabled;
   const selected = !!opts.selected;
-  const draggable = !!opts.draggable && !disabled;
   const selectAction = opts.selectAction || "select-candidate";
   const selectLabel = opts.selectLabel || "この選手を選ぶ";
   const extraAttrs = opts.extraAttrs || "";
   return `
   <div class="card ${selected ? "selected" : ""} ${disabled ? "disabled" : ""} bg-slate-800 border border-slate-700 rounded-xl p-3"
-       data-role="candidate-card" data-player-id="${p.id}" draggable="${draggable ? "true" : "false"}">
+       data-role="candidate-card" data-player-id="${p.id}">
     <div class="flex justify-between items-start gap-1">
       <div>
         <div class="font-bold text-sm sm:text-base leading-tight">${p.name}</div>
@@ -659,8 +655,8 @@ function rosterSlotBox(roster, slotKey, opts){
   const p = roster[slotKey];
   const isCurrent = opts.current;
   return `
-  <div class="dropzone ${isCurrent ? "ring-2 ring-amber-400" : ""} bg-slate-900 border border-slate-700 rounded-lg p-2 text-center"
-       data-role="${opts.droppable ? "roster-slot-drop" : ""}" data-slot-key="${slotKey}">
+  <div class="${isCurrent ? "ring-2 ring-amber-400" : ""} bg-slate-900 border border-slate-700 rounded-lg p-2 text-center"
+       data-slot-key="${slotKey}">
     <div class="text-[10px] text-slate-500">${slot.label}</div>
     ${p ? `<div class="text-xs sm:text-sm font-bold truncate">${p.name}</div><div class="text-[10px] text-amber-400">${formatMoney(p.salary_current)}</div>`
         : `<div class="text-xs text-slate-600 py-2">－</div>`}
@@ -670,7 +666,7 @@ function rosterSlotBox(roster, slotKey, opts){
 function rosterGrid(roster, opts){
   opts = opts || {};
   return `<div class="grid grid-cols-4 sm:grid-cols-6 gap-1.5">
-    ${ALL_SLOT_KEYS.map(k => rosterSlotBox(roster, k, { current: opts.currentSlotKey === k, droppable: opts.droppable })).join("")}
+    ${ALL_SLOT_KEYS.map(k => rosterSlotBox(roster, k, { current: opts.currentSlotKey === k })).join("")}
   </div>`;
 }
 
@@ -734,8 +730,8 @@ function renderDraft(){
   </div>
 
   <div class="mb-3">
-    <div class="text-xs text-slate-400 mb-1">あなたのロースター（枠にカードをドラッグ、またはカードのボタンで指名）</div>
-    ${rosterGrid(state.playerRoster, { currentSlotKey: slot.slotKey, droppable: true })}
+    <div class="text-xs text-slate-400 mb-1">あなたのロースター</div>
+    ${rosterGrid(state.playerRoster, { currentSlotKey: slot.slotKey })}
   </div>
 
   <div class="grid lg:grid-cols-3 gap-3">
@@ -745,7 +741,7 @@ function renderDraft(){
       <div class="grid sm:grid-cols-2 gap-2 overflow-y-auto pr-1" style="max-height:52vh">
         ${pool.length ? pool.map(p => {
           const disabled = state.roundPlayerLocked || p.salary_current > (BUDGET - state.playerBudgetUsed);
-          return playerCard(p, { disabled, selected: state.pendingPick === p.id, draggable: true });
+          return playerCard(p, { disabled, selected: state.pendingPick === p.id });
         }).join("") : `<div class="col-span-full text-center text-slate-500 text-sm py-6">条件に一致する選手がいません</div>`}
       </div>
     </div>
@@ -1498,39 +1494,6 @@ document.body.addEventListener("change", (e) => {
   if (e.target.matches('[data-role="order-position-select"]')){
     moveOrderToPosition(Number(e.target.dataset.idx), Number(e.target.value));
   }
-});
-
-/* ---- ドラッグ&ドロップ（指名候補カード → 自チーム指名枠 専用） ---- */
-document.body.addEventListener("dragstart", (e) => {
-  const card = e.target.closest('[data-role="candidate-card"][draggable="true"]');
-  if (!card) return;
-  e.dataTransfer.setData("text/plain", card.dataset.playerId);
-  e.dataTransfer.effectAllowed = "move";
-});
-document.body.addEventListener("dragover", (e) => {
-  const zone = e.target.closest('[data-role="roster-slot-drop"]');
-  if (!zone) return;
-  e.preventDefault();
-  zone.classList.add("dragover");
-});
-document.body.addEventListener("dragleave", (e) => {
-  const zone = e.target.closest('[data-role="roster-slot-drop"]');
-  if (!zone) return;
-  zone.classList.remove("dragover");
-});
-document.body.addEventListener("drop", (e) => {
-  const zone = e.target.closest('[data-role="roster-slot-drop"]');
-  if (!zone) return;
-  e.preventDefault();
-  zone.classList.remove("dragover");
-  const idStr = e.dataTransfer.getData("text/plain");
-  if (!idStr) return;
-  const slot = ROUND_SLOTS[state.round - 1];
-  if (zone.dataset.slotKey !== slot.slotKey){
-    toast("今の巡で指名できる枠にドラッグしてください", "warn");
-    return;
-  }
-  selectCandidate(Number(idStr));
 });
 
 /* =========================================================
