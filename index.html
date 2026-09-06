@@ -137,6 +137,9 @@ function formatDelta(man){
 function rand(min,max){ return Math.random()*(max-min)+min; }
 function clamp(v,min,max){ return Math.max(min, Math.min(max, v)); }
 function uid(){ return Math.random().toString(36).slice(2,9); }
+function escapeHtml(str){
+  return (str || "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#039;");
+}
 
 function toast(msg, kind){
   const host = document.getElementById("toastHost");
@@ -454,7 +457,7 @@ function candidateFilterToolbar(fullPool, filter){
   const hasFilter = !!(filter.search || filter.team);
   return `
   <div class="flex flex-wrap gap-2 mb-2" data-role="candidate-toolbar">
-    <input type="text" data-role="candidate-search" value="${(filter.search||"").replace(/"/g,"&quot;")}" placeholder="🔍 選手名・球団名で検索"
+    <input type="text" data-role="candidate-search" value="${escapeHtml(filter.search)}" placeholder="🔍 選手名・球団名で検索"
       class="flex-1 min-w-[140px] bg-slate-900 border border-slate-700 rounded-lg px-2 py-1.5 text-xs sm:text-sm" />
     <select data-role="candidate-team-select" class="bg-slate-900 border border-slate-700 rounded-lg px-2 py-1.5 text-xs sm:text-sm">${teamOptions}</select>
     <select data-role="candidate-sort-select" class="bg-slate-900 border border-slate-700 rounded-lg px-2 py-1.5 text-xs sm:text-sm">${sortOptions}</select>
@@ -473,28 +476,42 @@ function minRemainingCostFrom(startRoundIdx, excludeIds){
   return total;
 }
 
-function aiScore(aiType, p, aiRoster){
+function aiScore(aiType, p, aiRoster, currentRound){
   const salary = p.salary_current;
   const jitter = rand(-8, 8);
+
+  // 残り巡数に対する「使い切るための」期待単価。終盤に予算を余らせすぎているAIほど、
+  // このラウンドで一気に評価の基準（ターゲット価格）を引き上げる。
+  let budgetRemain = null, roundsRemain = null, expectedAvg = null;
+  if (currentRound != null){
+    budgetRemain = BUDGET - state.aiBudgetUsed;
+    roundsRemain = 13 - currentRound; // このピックを含む残り巡数
+    expectedAvg = budgetRemain / (roundsRemain || 1);
+  }
+  const forcingEndgame = roundsRemain != null && roundsRemain <= 3 && expectedAvg > 5000;
+
+  let score;
   if (aiType === "data"){
     // 2,000万〜5,000万円帯を中心に、そこから離れるほど評価が下がる
-    let score = 100 - Math.abs(salary - 3500) / 45;
+    score = 100 - Math.abs(salary - 3500) / 45;
     if (salary >= 2000 && salary <= 5000) score += 20;
-    return score + jitter;
-  }
-  if (aiType === "roman"){
+  } else if (aiType === "roman"){
     // 1,000万〜2,000万円帯（1,500万円前後）を最優先。安すぎる選手も高すぎる選手も評価を下げ、
-    // 単なる最安値選択にならないようにする（＝予算を極端に余らせない）
-    let score = 100 - Math.abs(salary - 1500) / 12;
-    return score + jitter;
-  }
-  if (aiType === "star"){
+    // 単なる最安値選択にならないようにする（＝予算を極端に余らせない）。
+    // ただし終盤まで予算を大きく余らせている場合は、ターゲット価格そのものを期待単価まで
+    // 引き上げて格安選手ばかり選び続けないようにする（「大穴AIが相手にもならない」対策）。
+    const target = forcingEndgame ? Math.max(1500, expectedAvg) : 1500;
+    const spread = forcingEndgame ? 35 : 12;
+    score = 100 - Math.abs(salary - target) / spread;
+  } else if (aiType === "star"){
     const starsSoFar = Object.values(aiRoster).filter(x => x && x.salary_current >= 30000).length;
-    if (salary >= 30000 && salary <= 50000 && starsSoFar < 2) return 130 + jitter;
-    if (salary < 3000) return 90 + jitter;
-    return 40 - salary / 3000 + jitter;
+    if (salary >= 30000 && salary <= 50000 && starsSoFar < 2) score = 130;
+    else if (salary < 3000) score = 90;
+    else score = 40 - salary / 3000;
+  } else {
+    score = 50;
   }
-  return 50 + jitter;
+  return score + jitter;
 }
 
 function aiChoose(slot, excludeIds){
@@ -512,7 +529,7 @@ function aiChoose(slot, excludeIds){
     const all = candidatePoolFor(slot, excludeIds).sort((a,b) => a.salary_current - b.salary_current);
     return all[0] ? all[0].id : null;
   }
-  const scored = pool.map(p => ({ p, score: aiScore(state.aiType, p, state.aiRoster) }));
+  const scored = pool.map(p => ({ p, score: aiScore(state.aiType, p, state.aiRoster, state.round) }));
   scored.sort((a,b) => b.score - a.score);
   const top = scored.slice(0, Math.min(3, scored.length));
   const weights = [0.6, 0.25, 0.15];
@@ -701,7 +718,7 @@ function renderDraft(){
   const freeTextBlock = (state.mode === "pennant") ? `
     <div class="bg-slate-800/60 border border-slate-700 rounded-xl p-3 mt-3">
       <label class="text-xs text-slate-400 block mb-1">獲得理由・ブレイク予想（任意／「フォーム変更」「レギュラー定着」「故障明け」「移籍1年目」等のキーワードがAI査定に影響します）</label>
-      <textarea data-role="free-text" rows="2" class="w-full bg-slate-900 border border-slate-700 rounded-lg p-2 text-xs sm:text-sm" placeholder="例：新球種を習得しレギュラー定着が期待できる">${state.freeTextDraft || ""}</textarea>
+      <textarea data-role="free-text" rows="2" class="w-full bg-slate-900 border border-slate-700 rounded-lg p-2 text-xs sm:text-sm" placeholder="例：新球種を習得しレギュラー定着が期待できる">${escapeHtml(state.freeTextDraft)}</textarea>
     </div>` : "";
 
   return `
