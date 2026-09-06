@@ -19,6 +19,7 @@
   .card:active{ transform:scale(0.98); }
   .card.selected{ box-shadow:0 0 0 3px #facc15; }
   .card.disabled{ opacity:.35; filter:grayscale(1); cursor:not-allowed; pointer-events:none; }
+  button:disabled{ opacity:.4; cursor:not-allowed; }
   .tab-btn.active{ background:#facc15; color:#1e293b; }
   .stat-bar-track{ background:#1e293b; border-radius:9999px; overflow:hidden; height:6px; }
   .stat-bar-fill{ height:100%; border-radius:9999px; }
@@ -57,10 +58,10 @@
   @keyframes pulse-hint{ 0%,100%{ opacity:.55;} 50%{ opacity:1;} }
 </style>
 </head>
-<body class="bg-slate-900 text-slate-100 min-h-screen pb-14">
+<body class="bg-slate-900 text-slate-100 min-h-screen">
 <div id="app" class="max-w-5xl mx-auto px-3 sm:px-4 py-4"></div>
 <div id="toastHost" class="fixed top-3 left-1/2 -translate-x-1/2 z-[100] flex flex-col gap-2 items-center"></div>
-<footer class="fixed bottom-0 left-0 right-0 bg-slate-950/95 border-t border-slate-800 text-[10px] sm:text-xs text-slate-400 text-center py-1.5 px-2 z-40">
+<footer class="bg-slate-950/95 border-t border-slate-800 text-[10px] sm:text-xs text-slate-400 text-center py-1.5 px-2">
   ※本アプリの選手名・所属球団・年俸は「週刊ベースボール DATA BOOK 2026」「同 2025」等の公表情報を参考にしたゲーム用データです。シーズン成績・翌年年俸はゲーム内シミュレーションであり、実際の球団発表・契約内容とは異なります。
 </footer>
 
@@ -245,8 +246,10 @@ function loadGame(slot){
   toast(`スロット${slot}から再開しました`);
 }
 function deleteSave(slot){
+  if (!window.confirm(`スロット${slot}のセーブデータを削除します。元に戻せませんがよろしいですか？`)) return;
   localStorage.removeItem(SAVE_PREFIX + slot);
   render();
+  toast(`スロット${slot}のセーブデータを削除しました`);
 }
 function listSaveSummaries(){
   const list = [];
@@ -300,7 +303,7 @@ function header(subtitle){
   <div class="mb-4">
     <div class="flex items-center justify-between flex-wrap gap-2">
       <h1 class="text-lg sm:text-2xl font-black tracking-tight">⚾ 10億年俸ドラフト</h1>
-      <button data-action="go-home" class="text-xs sm:text-sm bg-slate-800 hover:bg-slate-700 px-3 py-1.5 rounded-lg border border-slate-700">🏠 ホームへ</button>
+      ${state.screen !== "home" ? `<button data-action="go-home" class="text-xs sm:text-sm bg-slate-800 hover:bg-slate-700 px-3 py-1.5 rounded-lg border border-slate-700">🏠 ホームへ</button>` : ""}
     </div>
     ${subtitle ? `<p class="text-slate-400 text-xs sm:text-sm mt-1">${subtitle}</p>` : ""}
   </div>`;
@@ -332,7 +335,8 @@ function playerCard(p, opts){
   const extraAttrs = opts.extraAttrs || "";
   return `
   <div class="card ${selected ? "selected" : ""} ${disabled ? "disabled" : ""} bg-slate-800 border border-slate-700 rounded-xl p-3"
-       data-role="candidate-card" data-player-id="${p.id}">
+       data-role="candidate-card" data-player-id="${p.id}"
+       ${!disabled ? `data-action="${selectAction}" ${extraAttrs}` : ""}>
     <div class="flex justify-between items-start gap-1">
       <div>
         <div class="font-bold text-sm sm:text-base leading-tight">${p.name}</div>
@@ -387,9 +391,12 @@ function renderHome(){
       <div class="text-xs sm:text-sm text-slate-500">${info.desc}</div>
       <div class="text-[10px] sm:text-xs text-amber-400 mt-1">🚧 ${info.disabledNote}</div>
     </div>` : `
-    <button data-action="choose-mode" data-mode="${key}" class="text-left bg-slate-800 hover:bg-slate-700 border border-slate-700 hover:border-amber-400 rounded-xl p-4 transition">
-      <div class="font-black text-base sm:text-lg mb-1">${info.label}</div>
-      <div class="text-xs sm:text-sm text-slate-400">${info.desc}</div>
+    <button data-action="choose-mode" data-mode="${key}" class="flex items-center gap-3 text-left bg-slate-800 hover:bg-slate-700 active:bg-slate-700 border border-slate-700 border-l-4 border-l-amber-500 hover:border-amber-400 rounded-xl p-4 transition">
+      <div class="flex-1 min-w-0">
+        <div class="font-black text-base sm:text-lg mb-1">${info.label}</div>
+        <div class="text-xs sm:text-sm text-slate-400">${info.desc}</div>
+      </div>
+      <div class="shrink-0 text-amber-400 text-xl">›</div>
     </button>`).join("");
 
   return `
@@ -409,9 +416,12 @@ function renderHome(){
 ========================================================= */
 function renderAiSelect(){
   const cards = Object.entries(AI_TYPES).map(([key, t]) => `
-    <button data-action="choose-ai" data-ai="${key}" class="text-left bg-slate-800 hover:bg-slate-700 border border-slate-700 hover:border-amber-400 rounded-xl p-4 transition">
-      <div class="font-black text-base mb-1">${t.label}</div>
-      <div class="text-xs sm:text-sm text-slate-400">${t.desc}</div>
+    <button data-action="choose-ai" data-ai="${key}" class="flex items-center gap-3 text-left bg-slate-800 hover:bg-slate-700 active:bg-slate-700 border border-slate-700 border-l-4 border-l-amber-500 hover:border-amber-400 rounded-xl p-4 transition">
+      <div class="flex-1 min-w-0">
+        <div class="font-black text-base mb-1">${t.label}</div>
+        <div class="text-xs sm:text-sm text-slate-400">${t.desc}</div>
+      </div>
+      <div class="shrink-0 text-amber-400 text-xl">›</div>
     </button>`).join("");
   return `
   ${header(MODE_INFO[state.mode] ? MODE_INFO[state.mode].label : "")}
@@ -738,7 +748,7 @@ function renderDraft(){
     <div class="lg:col-span-2">
       <div class="text-xs text-slate-400 mb-2">指名候補（${slot.label} ／ ${pool.length} / ${fullPool.length}名）</div>
       ${candidateFilterToolbar(fullPool, state.candidateFilter)}
-      <div class="grid sm:grid-cols-2 gap-2 overflow-y-auto pr-1" style="max-height:52vh">
+      <div class="grid sm:grid-cols-2 gap-2 overflow-y-auto pr-1" style="max-height:52vh;overflow-y:auto">
         ${pool.length ? pool.map(p => {
           const disabled = state.roundPlayerLocked || p.salary_current > (BUDGET - state.playerBudgetUsed);
           return playerCard(p, { disabled, selected: state.pendingPick === p.id });
@@ -759,7 +769,7 @@ function renderDraft(){
     ${selected ? freeTextBlock : ""}
   </div>
   ${(!state.roundPlayerLocked) ? `
-  <div class="lg:hidden sticky z-30 mt-3 -mx-3 sm:-mx-4 px-3 sm:px-4 py-2.5 bg-slate-950 border-t-2 border-amber-500" style="bottom:3.5rem; box-shadow:0 -4px 16px rgba(0,0,0,0.5)">
+  <div class="lg:hidden sticky z-30 mt-3 -mx-3 sm:-mx-4 px-3 sm:px-4 py-2.5 bg-slate-950 border-t-2 border-amber-500" style="bottom:0; box-shadow:0 -4px 16px rgba(0,0,0,0.5)">
     <div class="flex items-center justify-between gap-3">
       <div class="min-w-0 flex-1">
         ${selected ? `
@@ -873,7 +883,7 @@ function renderBuilder(){
     const usedWithoutSlot = state.playerBudgetUsed - (prev ? prev.salary_current : 0);
     pickerBlock = `
     <div class="fixed inset-0 bg-black/70 flex items-end sm:items-center justify-center z-50 p-2 sm:p-4" data-role="builder-picker-backdrop">
-      <div class="bg-slate-900 border border-slate-700 rounded-2xl p-4 max-w-3xl w-full overflow-y-auto" style="max-height:85vh">
+      <div class="bg-slate-900 border border-slate-700 rounded-2xl p-4 max-w-3xl w-full overflow-y-auto" style="max-height:85vh;overflow-y:auto">
         <div class="flex justify-between items-center mb-3">
           <div class="font-black">${slot.label} を選択（${pool.length} / ${fullPool.length}名）</div>
           <button data-action="close-builder-picker" class="text-slate-400 hover:text-white text-xl leading-none">×</button>
@@ -980,8 +990,8 @@ function renderOrder(){
         <div class="text-[10px] sm:text-xs text-slate-400">${p.team} ／ ${formatMoney(p.salary_current)} ／ ${p.age}歳</div>
       </div>
       <div class="flex flex-col gap-1 shrink-0">
-        <button data-action="order-up" data-idx="${idx}" class="text-xs bg-slate-700 hover:bg-slate-600 rounded px-2 py-0.5" ${idx===0?"disabled":""}>▲</button>
-        <button data-action="order-down" data-idx="${idx}" class="text-xs bg-slate-700 hover:bg-slate-600 rounded px-2 py-0.5" ${idx===order.length-1?"disabled":""}>▼</button>
+        <button data-action="order-up" data-idx="${idx}" class="text-sm bg-slate-700 hover:bg-slate-600 rounded px-2.5 py-1.5" ${idx===0?"disabled":""}>▲</button>
+        <button data-action="order-down" data-idx="${idx}" class="text-sm bg-slate-700 hover:bg-slate-600 rounded px-2.5 py-1.5" ${idx===order.length-1?"disabled":""}>▼</button>
       </div>
     </div>`;
   }).join("");
@@ -1218,7 +1228,7 @@ function renderResultsRanking(data){
   const rows = [...data.playerRows.map(r => ({...r, team:"player"})), ...data.aiRows.map(r => ({...r, team:"ai"}))]
     .sort((a,b) => b.raise - a.raise);
   return `
-  <div class="space-y-1.5 overflow-y-auto pr-1" style="max-height:60vh">
+  <div class="space-y-1.5 overflow-y-auto pr-1" style="max-height:60vh;overflow-y:auto">
     ${rows.map((r,i) => `
     <div class="flex items-center gap-2 bg-slate-800 border border-slate-700 rounded-lg p-2">
       <div class="w-6 text-center text-xs text-slate-500 shrink-0">${i+1}</div>
@@ -1245,7 +1255,7 @@ function renderResultsNews(data){
     <div class="bg-slate-800/60 border border-slate-700 rounded-xl p-3 mb-4">
       <canvas id="newsLineChart" height="160"></canvas>
     </div>
-    <div class="space-y-2 overflow-y-auto pr-1" style="max-height:45vh">
+    <div class="space-y-2 overflow-y-auto pr-1" style="max-height:45vh;overflow-y:auto">
       ${allRows.map(r => `
       <div class="bg-slate-800 border border-slate-700 rounded-xl p-3">
         <div class="text-xs ${r.team==="player"?"text-sky-400":"text-rose-400"} font-bold mb-1">${r.team==="player"?"あなたのチーム":"ライバル球団"} ／ ${SLOT_BY_KEY[r.slotKey].label} ／ ${r.player.name}</div>
@@ -1254,7 +1264,7 @@ function renderResultsNews(data){
     </div>`;
   }
   const sorted = allRows.slice().sort((a,b) => ALL_SLOT_KEYS.indexOf(a.slotKey) - ALL_SLOT_KEYS.indexOf(b.slotKey) || (a.team>b.team?1:-1));
-  return `<div class="space-y-1.5 overflow-y-auto pr-1" style="max-height:60vh">
+  return `<div class="space-y-1.5 overflow-y-auto pr-1" style="max-height:60vh;overflow-y:auto">
     ${sorted.map(r => `
     <div class="flex items-center justify-between bg-slate-800 border border-slate-700 rounded-lg p-2 gap-2">
       <div class="text-xs">
