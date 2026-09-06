@@ -472,12 +472,18 @@ function candidateFilterToolbar(fullPool, filter){
 }
 
 function minRemainingCostFrom(startRoundIdx, excludeIds){
+  // 内野①〜④・外野①〜④のように同じ枠（同じpos/bestPos）が複数巡連続するため、
+  // 各巡の「最安の1人」を使い切り扱いにして次の巡の計算から除外しないと、
+  // 同一選手を複数の枠に重複して使い回せる前提の甘い見積りになってしまう。
   let total = 0;
+  const running = new Set(excludeIds);
   for (let r = startRoundIdx; r <= 12; r++){
     const slot = ROUND_SLOTS[r-1];
-    const pool = candidatePoolFor(slot, excludeIds);
+    const pool = candidatePoolFor(slot, running);
     if (pool.length === 0) return Infinity;
-    total += Math.min(...pool.map(p => p.salary_current));
+    const cheapest = pool.reduce((min, p) => p.salary_current < min.salary_current ? p : min, pool[0]);
+    total += cheapest.salary_current;
+    running.add(cheapest.id);
   }
   return total;
 }
@@ -522,16 +528,25 @@ function aiScore(aiType, p, aiRoster, currentRound){
 
 function aiChoose(slot, excludeIds){
   const budgetRemain = BUDGET - state.aiBudgetUsed;
-  let pool = candidatePoolFor(slot, excludeIds).filter(p => p.salary_current <= budgetRemain);
+  const affordable = candidatePoolFor(slot, excludeIds).filter(p => p.salary_current <= budgetRemain);
   // 予算破綻を避けるため、この後の巡を編成しきれる選手のみに絞る
-  const feasible = pool.filter(p => {
+  const feasible = affordable.filter(p => {
     const nextExclude = new Set(excludeIds); nextExclude.add(p.id);
     const remainAfter = budgetRemain - p.salary_current;
     return minRemainingCostFrom(slot.round + 1, nextExclude) <= remainAfter;
   });
-  if (feasible.length > 0) pool = feasible;
-  if (pool.length === 0){
-    // フォールバック：最安の選手を強制選択（理論上到達しない保険）
+  let pool;
+  if (feasible.length > 0){
+    pool = feasible;
+  } else if (affordable.length > 0){
+    // どの選手を選んでも将来の枠を編成しきれない可能性がある状況：
+    // 好みのスコアより「なるべく安く済ませて後の巡に予算を残す」ことを優先する
+    const cheapest = affordable.slice().sort((a,b) => a.salary_current - b.salary_current);
+    return cheapest[0].id;
+  } else {
+    // 予算内に候補が1人もいない（対戦相手の指名で追い込まれた場合の保険。
+    // 予算超過してでもロースターを埋める。通常はまず発生しないはずなので警告を残す）
+    console.warn(`[aiChoose] slot ${slot.slotKey}: no affordable candidate within budget, forced to exceed budget`);
     const all = candidatePoolFor(slot, excludeIds).sort((a,b) => a.salary_current - b.salary_current);
     return all[0] ? all[0].id : null;
   }
