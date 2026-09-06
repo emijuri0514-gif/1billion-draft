@@ -28,25 +28,36 @@
   [hidden]{ display:none !important; }
   .toast{ animation: fadeIn .2s ease-out, fadeOut .3s ease-in 2.2s forwards; }
   @keyframes fadeOut{ to{ opacity:0; transform:translateY(-6px);} }
-  .kuji-wrap{ display:flex; gap:18px; justify-content:center; margin:16px auto 2px; perspective:700px; }
-  .kuji-slot{ display:flex; flex-direction:column; align-items:center; gap:6px; }
-  .kuji-card{ width:78px; height:106px; }
-  .kuji-card-inner{
-    width:100%; height:100%; position:relative; transform-style:preserve-3d;
-    transition: transform .7s cubic-bezier(.34,1.1,.4,1);
+  .envelope-stage{ display:flex; gap:26px; justify-content:center; margin:16px auto 2px; perspective:600px; }
+  .envelope{ position:relative; width:100px; height:100px; }
+  .envelope-back{
+    position:absolute; left:0; right:0; bottom:0; height:66px;
+    background:#e9d9ac; border:2px solid #b89b63; border-radius:3px 3px 8px 8px; z-index:1;
+    box-shadow:0 3px 6px rgba(0,0,0,.35);
   }
-  .kuji-card.flipped .kuji-card-inner{ transform:rotateY(180deg); }
-  .kuji-card.shaking .kuji-card-inner{ animation:kuji-shake .3s ease-in-out infinite; }
-  @keyframes kuji-shake{ 0%,100%{ transform:rotate(-5deg) translateY(0);} 50%{ transform:rotate(5deg) translateY(-3px);} }
-  .kuji-face{
-    position:absolute; inset:0; backface-visibility:hidden; border-radius:12px;
-    display:flex; align-items:center; justify-content:center; font-weight:900; text-align:center;
+  .envelope-back::before{ content:""; position:absolute; left:2px; right:2px; top:2px; bottom:2px; border:1px dashed rgba(184,155,99,.6); border-radius:2px 2px 6px 6px; }
+  .envelope-flap{
+    position:absolute; top:16px; left:0; right:0; height:42px;
+    background:#f2e4bd; border:2px solid #b89b63; border-bottom:none;
+    clip-path: polygon(0% 0%, 50% 100%, 100% 0%);
+    transform-origin:50% 0%; transition: transform .55s ease-in; z-index:3;
   }
-  .kuji-face-back{ background:linear-gradient(135deg,#1e293b,#334155); border:2px dashed #64748b; color:#64748b; font-size:30px; }
-  .kuji-face-front{ transform:rotateY(180deg); font-size:14px; line-height:1.4; padding:4px; }
-  .kuji-face-front.win{ background:#fef3c7; color:#92400e; border:2px solid #f59e0b; }
-  .kuji-face-front.lose{ background:#334155; color:#94a3b8; border:2px solid #475569; }
-  .kuji-slot-label{ font-size:11px; color:#94a3b8; font-weight:700; }
+  .envelope.opened .envelope-flap{ transform: rotateX(165deg); }
+  .envelope-slip{
+    position:absolute; left:6px; right:6px; top:32px; height:56px;
+    background:#fff; border:2px solid #cbd5e1; border-radius:4px; z-index:2;
+    display:flex; align-items:center; justify-content:center; text-align:center; padding:3px;
+    font-weight:900; font-size:11px; line-height:1.35; color:#1e293b;
+    opacity:0; transform:translateY(8px) scale(.82);
+    transition: transform .5s cubic-bezier(.22,.9,.3,1.2) .28s, opacity .3s ease .28s;
+  }
+  .envelope.opened .envelope-slip{ opacity:1; transform:translateY(-36px) scale(1); z-index:4; }
+  .envelope-slip.win{ background:#fef3c7; border-color:#f59e0b; color:#92400e; }
+  .envelope[data-action]{ cursor:pointer; }
+  .envelope[data-action] .envelope-back{ animation:envelope-pulse 1s ease-in-out infinite; }
+  @keyframes envelope-pulse{ 0%,100%{ box-shadow:0 3px 6px rgba(0,0,0,.35);} 50%{ box-shadow:0 3px 6px rgba(0,0,0,.35), 0 0 0 3px rgba(250,204,21,.55);} }
+  .envelope-hint{ font-size:11px; color:#facc15; margin-bottom:2px; animation:pulse-hint 1.2s ease-in-out infinite; }
+  @keyframes pulse-hint{ 0%,100%{ opacity:.55;} 50%{ opacity:1;} }
 </style>
 </head>
 <body class="bg-slate-900 text-slate-100 min-h-screen pb-14">
@@ -558,11 +569,26 @@ function confirmPick(){
   proceedIfBothLocked();
 }
 
+let waiverAutoPickTimer = null;
 function runWaiver(slot, contestedId){
-  // 結果は先に抽選しておき、くじの中身（当たり／はずれ）を固定した状態で
-  // シャッフル演出→カードをめくって結果を見せる、という順序にする。
+  // 結果は先に抽選しておき、封筒の中身（交渉権確定／対象外）を固定した状態で
+  // 「封筒を選ぶ→開封して結果を見る」という実際のドラフト会議のくじ引きの流れにする。
   const playerWins = Math.random() < 0.5;
-  state.waiver = { contestedId, phase: "spinning", playerWins };
+  state.waiver = { contestedId, phase: "choosing", playerWins, chosenSide: null, slot };
+  render();
+  clearTimeout(waiverAutoPickTimer);
+  waiverAutoPickTimer = setTimeout(() => {
+    if (state.waiver && state.waiver.phase === "choosing"){
+      chooseWaiverEnvelope(Math.random() < 0.5 ? "left" : "right");
+    }
+  }, 6000);
+}
+function chooseWaiverEnvelope(side){
+  if (!state.waiver || state.waiver.phase !== "choosing") return;
+  clearTimeout(waiverAutoPickTimer);
+  const { slot, contestedId, playerWins } = state.waiver;
+  state.waiver.phase = "opening";
+  state.waiver.chosenSide = side;
   render();
   setTimeout(() => {
     state.waiver.phase = "result";
@@ -581,8 +607,8 @@ function runWaiver(slot, contestedId){
       state.waiver = null;
       state.pendingPick = null;
       proceedIfBothLocked();
-    }, 2200);
-  }, 1500);
+    }, 2400);
+  }, 900);
 }
 
 function proceedIfBothLocked(){
@@ -737,46 +763,55 @@ function renderDraft(){
   ${waiverModal}`;
 }
 
-function kujiCard(id, label, spinning, won){
+function envelopeHtml(side, startOpened, result, clickable){
+  const revealText = result === "win" ? "🎉<br>交渉権確定！" : (result === "lose" ? "対象外" : "");
   return `
-  <div class="kuji-slot">
-    <div class="kuji-card ${spinning ? "shaking" : ""}" id="${id}">
-      <div class="kuji-card-inner">
-        <div class="kuji-face kuji-face-back">🎫</div>
-        <div class="kuji-face kuji-face-front ${won ? "win" : "lose"}">${won ? "🎉<br>当たり" : "はずれ"}</div>
-      </div>
-    </div>
-    <div class="kuji-slot-label">${label}</div>
-  </div>`;
-}
-function kujiCards(spinning, playerWins){
-  return `
-  <div class="kuji-wrap">
-    ${kujiCard("kujiCardPlayer", "あなた", spinning, playerWins)}
-    ${kujiCard("kujiCardAi", "ライバル", spinning, !playerWins)}
+  <div class="envelope ${startOpened ? "opened" : ""}" id="envelope-${side}" ${clickable ? `data-action="choose-envelope" data-side="${side}"` : ""}>
+    <div class="envelope-slip ${result === "win" ? "win" : ""}">${revealText}</div>
+    <div class="envelope-flap"></div>
+    <div class="envelope-back"></div>
   </div>`;
 }
 function renderWaiverModal(){
   const p = PLAYERS_BY_ID[state.waiver.contestedId];
-  if (state.waiver.phase === "spinning"){
+  const phase = state.waiver.phase; // "choosing" | "opening" | "result"
+  const playerWins = state.waiver.playerWins;
+  const chosenSide = state.waiver.chosenSide;
+  const rivalSide = chosenSide === "left" ? "right" : "left";
+
+  // 「自分が選んだ封筒」は開封フェーズの初回描画でのみアニメーションさせ（afterRenderでopenedを付与）、
+  // resultフェーズでは既に開封済みの状態をそのまま静的に描画する（再アニメーション＝チラつき防止）。
+  // 「ライバルの封筒」はresultフェーズの初回描画でアニメーションさせる。
+  const stage = (side) => {
+    if (phase === "choosing") return envelopeHtml(side, false, null, true);
+    if (side === chosenSide) return envelopeHtml(side, phase === "result", playerWins ? "win" : "lose", false);
+    if (side === rivalSide && phase === "result") return envelopeHtml(side, false, playerWins ? "lose" : "win", false);
+    return envelopeHtml(side, false, null, false);
+  };
+  const envelopeStage = `<div class="envelope-stage">${stage("left")}${stage("right")}</div>`;
+
+  if (phase === "choosing"){
     return `
     <div class="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4">
       <div class="bg-slate-800 border border-amber-500 rounded-2xl p-6 text-center max-w-xs w-full">
-        <div class="font-black mb-1">競合発生！ウェーバーくじ引き中…</div>
-        <div class="text-sm text-slate-400">${p.name} 選手を両球団が指名しました</div>
-        ${kujiCards(true, state.waiver.playerWins)}
+        <div class="font-black mb-1">競合発生！ウェーバー抽選</div>
+        <div class="text-sm text-slate-400 mb-2">${p.name} 選手を両球団が指名しました</div>
+        <div class="envelope-hint">📩 交渉権が入った封筒を1つ選んでください</div>
+        ${envelopeStage}
       </div>
     </div>`;
   }
-  const won = state.waiver.winner === "player";
+  const won = phase === "result" && state.waiver.winner === "player";
   return `
   <div class="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4">
-    <div class="bg-slate-800 border ${won ? "border-emerald-500" : "border-rose-500"} rounded-2xl p-6 text-center max-w-xs w-full">
-      <div class="text-sm text-slate-400">${p.name} 選手の争奪ウェーバー</div>
-      ${kujiCards(false, state.waiver.playerWins)}
-      <div class="text-3xl mb-2 mt-3">${won ? "🎉" : "😢"}</div>
-      <div class="font-black mb-1">${won ? `${p.name} 選手を獲得しました！` : `ウェーバーに敗れました…`}</div>
-      <div class="text-sm text-slate-400">${won ? "抽選の結果、あなたが指名権を獲得しました" : `${p.name} 選手はライバル球団が獲得しました。続けて別の選手を指名してください。`}</div>
+    <div class="bg-slate-800 border ${phase === "result" ? (won ? "border-emerald-500" : "border-rose-500") : "border-amber-500"} rounded-2xl p-6 text-center max-w-xs w-full">
+      <div class="text-sm text-slate-400 mb-2">${p.name} 選手の争奪ウェーバー</div>
+      ${envelopeStage}
+      <div class="text-sm text-slate-400 mt-3">${
+        phase === "opening" ? "開封中…"
+        : won ? `🎉 ${p.name} 選手を獲得しました！`
+        : `😢 ${p.name} 選手はライバル球団が獲得しました。続けて別の選手を指名してください。`
+      }</div>
     </div>
   </div>`;
 }
@@ -1268,17 +1303,18 @@ function afterRender(){
       makeChart("newsLineChart", lineConfigForPlayer(row));
     }
   }
+  if (state.waiver && state.waiver.phase === "opening"){
+    const chosenEl = document.getElementById(`envelope-${state.waiver.chosenSide}`);
+    if (chosenEl){
+      requestAnimationFrame(() => requestAnimationFrame(() => chosenEl.classList.add("opened")));
+    }
+  }
   if (state.waiver && state.waiver.phase === "result"){
-    const playerWins = state.waiver.playerWins;
-    const loserEl = document.getElementById(playerWins ? "kujiCardAi" : "kujiCardPlayer");
-    const winnerEl = document.getElementById(playerWins ? "kujiCardPlayer" : "kujiCardAi");
-    // はずれのカードを先にめくり、少し間を置いてから当たりのカードをめくることで、じらしの間をつくる
-    requestAnimationFrame(() => {
-      requestAnimationFrame(() => {
-        if (loserEl) loserEl.classList.add("flipped");
-        setTimeout(() => { if (winnerEl) winnerEl.classList.add("flipped"); }, 450);
-      });
-    });
+    const rivalSide = state.waiver.chosenSide === "left" ? "right" : "left";
+    const rivalEl = document.getElementById(`envelope-${rivalSide}`);
+    if (rivalEl){
+      requestAnimationFrame(() => requestAnimationFrame(() => rivalEl.classList.add("opened")));
+    }
   }
 }
 
@@ -1380,6 +1416,9 @@ document.body.addEventListener("click", (e) => {
       state.candidateFilter.search = "";
       state.candidateFilter.team = "";
       render();
+      break;
+    case "choose-envelope":
+      chooseWaiverEnvelope(el.dataset.side);
       break;
     case "open-builder-slot":
       state.builderPickingSlot = el.dataset.slotKey;
