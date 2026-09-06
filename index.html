@@ -28,6 +28,25 @@
   [hidden]{ display:none !important; }
   .toast{ animation: fadeIn .2s ease-out, fadeOut .3s ease-in 2.2s forwards; }
   @keyframes fadeOut{ to{ opacity:0; transform:translateY(-6px);} }
+  .kuji-wrap{ display:flex; gap:18px; justify-content:center; margin:16px auto 2px; perspective:700px; }
+  .kuji-slot{ display:flex; flex-direction:column; align-items:center; gap:6px; }
+  .kuji-card{ width:78px; height:106px; }
+  .kuji-card-inner{
+    width:100%; height:100%; position:relative; transform-style:preserve-3d;
+    transition: transform .7s cubic-bezier(.34,1.1,.4,1);
+  }
+  .kuji-card.flipped .kuji-card-inner{ transform:rotateY(180deg); }
+  .kuji-card.shaking .kuji-card-inner{ animation:kuji-shake .3s ease-in-out infinite; }
+  @keyframes kuji-shake{ 0%,100%{ transform:rotate(-5deg) translateY(0);} 50%{ transform:rotate(5deg) translateY(-3px);} }
+  .kuji-face{
+    position:absolute; inset:0; backface-visibility:hidden; border-radius:12px;
+    display:flex; align-items:center; justify-content:center; font-weight:900; text-align:center;
+  }
+  .kuji-face-back{ background:linear-gradient(135deg,#1e293b,#334155); border:2px dashed #64748b; color:#64748b; font-size:30px; }
+  .kuji-face-front{ transform:rotateY(180deg); font-size:14px; line-height:1.4; padding:4px; }
+  .kuji-face-front.win{ background:#fef3c7; color:#92400e; border:2px solid #f59e0b; }
+  .kuji-face-front.lose{ background:#334155; color:#94a3b8; border:2px solid #475569; }
+  .kuji-slot-label{ font-size:11px; color:#94a3b8; font-weight:700; }
 </style>
 </head>
 <body class="bg-slate-900 text-slate-100 min-h-screen pb-14">
@@ -540,10 +559,12 @@ function confirmPick(){
 }
 
 function runWaiver(slot, contestedId){
-  state.waiver = { contestedId, phase: "spinning" };
+  // 結果は先に抽選しておき、くじの中身（当たり／はずれ）を固定した状態で
+  // シャッフル演出→カードをめくって結果を見せる、という順序にする。
+  const playerWins = Math.random() < 0.5;
+  state.waiver = { contestedId, phase: "spinning", playerWins };
   render();
   setTimeout(() => {
-    const playerWins = Math.random() < 0.5;
     state.waiver.phase = "result";
     state.waiver.winner = playerWins ? "player" : "ai";
     if (playerWins){
@@ -560,8 +581,8 @@ function runWaiver(slot, contestedId){
       state.waiver = null;
       state.pendingPick = null;
       proceedIfBothLocked();
-    }, 1500);
-  }, 1400);
+    }, 2200);
+  }, 1500);
 }
 
 function proceedIfBothLocked(){
@@ -716,15 +737,34 @@ function renderDraft(){
   ${waiverModal}`;
 }
 
+function kujiCard(id, label, spinning, won){
+  return `
+  <div class="kuji-slot">
+    <div class="kuji-card ${spinning ? "shaking" : ""}" id="${id}">
+      <div class="kuji-card-inner">
+        <div class="kuji-face kuji-face-back">🎫</div>
+        <div class="kuji-face kuji-face-front ${won ? "win" : "lose"}">${won ? "🎉<br>当たり" : "はずれ"}</div>
+      </div>
+    </div>
+    <div class="kuji-slot-label">${label}</div>
+  </div>`;
+}
+function kujiCards(spinning, playerWins){
+  return `
+  <div class="kuji-wrap">
+    ${kujiCard("kujiCardPlayer", "あなた", spinning, playerWins)}
+    ${kujiCard("kujiCardAi", "ライバル", spinning, !playerWins)}
+  </div>`;
+}
 function renderWaiverModal(){
   const p = PLAYERS_BY_ID[state.waiver.contestedId];
   if (state.waiver.phase === "spinning"){
     return `
     <div class="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4">
       <div class="bg-slate-800 border border-amber-500 rounded-2xl p-6 text-center max-w-xs w-full">
-        <div class="text-3xl mb-3 spin-slot">🎲</div>
-        <div class="font-black mb-1">競合発生！ウェーバー抽選中…</div>
+        <div class="font-black mb-1">競合発生！ウェーバーくじ引き中…</div>
         <div class="text-sm text-slate-400">${p.name} 選手を両球団が指名しました</div>
+        ${kujiCards(true, state.waiver.playerWins)}
       </div>
     </div>`;
   }
@@ -732,7 +772,9 @@ function renderWaiverModal(){
   return `
   <div class="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4">
     <div class="bg-slate-800 border ${won ? "border-emerald-500" : "border-rose-500"} rounded-2xl p-6 text-center max-w-xs w-full">
-      <div class="text-3xl mb-3">${won ? "🎉" : "😢"}</div>
+      <div class="text-sm text-slate-400">${p.name} 選手の争奪ウェーバー</div>
+      ${kujiCards(false, state.waiver.playerWins)}
+      <div class="text-3xl mb-2 mt-3">${won ? "🎉" : "😢"}</div>
       <div class="font-black mb-1">${won ? `${p.name} 選手を獲得しました！` : `ウェーバーに敗れました…`}</div>
       <div class="text-sm text-slate-400">${won ? "抽選の結果、あなたが指名権を獲得しました" : `${p.name} 選手はライバル球団が獲得しました。続けて別の選手を指名してください。`}</div>
     </div>
@@ -1225,6 +1267,18 @@ function afterRender(){
       const row = allRows.find(r => String(r.player.id) === String(selId)) || allRows[0];
       makeChart("newsLineChart", lineConfigForPlayer(row));
     }
+  }
+  if (state.waiver && state.waiver.phase === "result"){
+    const playerWins = state.waiver.playerWins;
+    const loserEl = document.getElementById(playerWins ? "kujiCardAi" : "kujiCardPlayer");
+    const winnerEl = document.getElementById(playerWins ? "kujiCardPlayer" : "kujiCardAi");
+    // はずれのカードを先にめくり、少し間を置いてから当たりのカードをめくることで、じらしの間をつくる
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        if (loserEl) loserEl.classList.add("flipped");
+        setTimeout(() => { if (winnerEl) winnerEl.classList.add("flipped"); }, 450);
+      });
+    });
   }
 }
 
